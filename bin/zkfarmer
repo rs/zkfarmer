@@ -18,36 +18,46 @@ import logging
 
 def main():
     from zktools.connection import ZkConnection
-    from optparse import OptionParser
+    import argparse
     from signal import signal, SIGTERM, SIGINT
 
-    parser = OptionParser(usage='usage: %prog [options] <join|export> /path/to/root/zknode /path/to/conf',
-                          description='Register the current host as a node of a service defined by a zookeeper node path on ' +
-                                      'one side and export the farm node list into a configuration file on the other side. ' +
-                                      'Additionnaly, each node can carry its own configuration.')
-    parser.add_option('-H', '--host', dest='host', default=os.environ.get('ZKHOST', 'localhost:2181'),
-                      help='list of zookeeper hosts:port sperated by commas')
-    parser.add_option('-f', '--format', dest='format', type='choice', choices=['json', 'php', 'dir'],
-                      help='set the configuration format (supported formats: json, php, dir)')
-    parser.add_option('-q', '--quiet', dest='quiet', action='store_true')
-    parser.add_option('-v', '--verbose', dest='verbose', action='store_true')
+    parser = argparse.ArgumentParser(description='Register the current host as a node of a service defined by a zookeeper node path on ' +
+                                     'one side and export the farm node list into a configuration file on the other side. ' +
+                                     'Additionnaly, each node can carry its own configuration.',
+                                     epilog='All your farms are belong to us')
 
-    (options, args) = parser.parse_args()
+    parser.add_argument('-H', '--host', dest='host', default=os.environ.get('ZKHOST', 'localhost:2181'),
+                        help='list of zookeeper hosts:port sperated by commas')
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('-q', '--quiet', dest='quiet', action='store_true',
+                       help='lower the log level so only warnings and errors are logged')
+    group.add_argument('-v', '--verbose', dest='verbose', action='store_true',
+                       help='raise the log level to DEBUG')
 
-    if len(args) is not 3:
-        parser.error('Missing argument')
+    subparsers = parser.add_subparsers(title='subcommands', dest='command')
+    subparsers.add_parser('join')
 
-    COMMAND = args[0]
-    ROOT_NODE_PATH = args[1]
-    CONF_PATH = args[2]
+    join_parser = subparsers.add_parser('join', help='make the current host to join a farm')
+    join_parser.add_argument('zknode', help='the ZooKeeper node path of the farm')
+    join_parser.add_argument('conf', help='Path to the node configuration')
+    join_parser.add_argument('-f', '--format', dest='format', choices=['json', 'php', 'dir'],
+                             help='set the configuration format (supported formats: json, php, dir)')
 
-    if ROOT_NODE_PATH[0] is not "/":
+    export_parser = subparsers.add_parser('export', help='exports and maintain a representation of the current farm status to a local configuration file')
+    export_parser.add_argument('zknode', help='the ZooKeeper node path of the farm')
+    export_parser.add_argument('conf', help='path to the local configuration')
+    export_parser.add_argument('-f', '--format', dest='format', choices=['json', 'php', 'dir'],
+                               help='set the configuration format (supported formats: json, php, dir)')
+
+    args = parser.parse_args()
+
+    if args.zknode and args.zknode[0] is not "/":
         parser.error('First argument must be the full path to the zookeeper node to create (eg: /services/db)')
 
-    if options.verbose:
+    if args.verbose:
         level = logging.DEBUG
         zookeeper.set_debug_level(zookeeper.LOG_LEVEL_DEBUG)
-    elif options.quiet:
+    elif args.quiet:
         level = logging.WARN
         zookeeper.set_debug_level(zookeeper.LOG_LEVEL_WARN)
     else:
@@ -57,12 +67,12 @@ def main():
     logging.basicConfig(level=level, format='%(asctime)s %(levelname)s %(message)s')
 
     try:
-        conf = Conf(CONF_PATH, options.format)
+        conf = Conf(args.conf, args.format)
     except ValueError, e:
         parser.error(e)
         exit(1)
 
-    zkconn = ZkConnection(host=options.host)
+    zkconn = ZkConnection(host=args.host)
 
     def sighandler(sig, frame):
         zkconn.close()
@@ -73,12 +83,12 @@ def main():
 
     farmer = ZkFarmer(zkconn)
 
-    if COMMAND == 'export':
-        farmer.export(conf, ROOT_NODE_PATH)
-    elif COMMAND == 'join':
-        farmer.join(conf, ROOT_NODE_PATH)
+    if args.command == 'export':
+        farmer.export(conf, args.zknode)
+    elif args.command == 'join':
+        farmer.join(conf, args.zknode)
     else:
-        parser.error('Invalid command: %s' % COMMAND)
+        parser.error('Unsupported command: %s' % args.command)
 
 
 if __name__ == "__main__":
