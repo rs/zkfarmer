@@ -26,6 +26,7 @@ def main():
                                      'Additionnaly, each node can carry its own configuration.',
                                      epilog='All your farms are belong to us')
 
+    parser.add_argument('-V', '--version', action='version', version='%(prog)s 0.1.0')
     parser.add_argument('-H', '--host', dest='host', default=os.environ.get('ZKHOST', 'localhost:2181'),
                         help='list of zookeeper hosts:port sperated by commas')
     group = parser.add_mutually_exclusive_group()
@@ -44,15 +45,27 @@ def main():
                              help='set the configuration format (supported formats: json, php, dir)')
 
     export_parser = subparsers.add_parser('export', help='exports and maintain a representation of the current farm status to a local configuration file')
-    export_parser.add_argument('zknode', help='the ZooKeeper node path of the farm')
+    export_parser.add_argument('zknode', help='the ZooKeeper node path to the farm')
     export_parser.add_argument('conf', help='path to the local configuration')
     export_parser.add_argument('-f', '--format', dest='format', choices=['json', 'php', 'dir'],
                                help='set the configuration format (supported formats: json, php, dir)')
+    export_parser.add_argument('-c', '--changed-cmd', dest='changed_cmd', metavar='CMD',
+                               help='a command to be executed each time the configuration change')
+
+    list_parser = subparsers.add_parser('ls', help='get the list of nodes')
+    list_parser.add_argument('zknode', help='the ZooKeeper node path to the farm')
+    list_parser.add_argument('--fields', help='list of node fields to output separated by commas')
+
+    get_parser = subparsers.add_parser('get', help='get the value of a field of a given node')
+    get_parser.add_argument('zknode', help='the ZooKeeper node path to the farm')
+    get_parser.add_argument('field', help='the path of the field to return')
+
+    set_parser = subparsers.add_parser('set', help='set the value of a field of a given node')
+    set_parser.add_argument('zknode', help='the ZooKeeper node path to the farm')
+    set_parser.add_argument('field', help='the path of the field to set')
+    set_parser.add_argument('value', help='the new value')
 
     args = parser.parse_args()
-
-    if args.zknode and args.zknode[0] is not "/":
-        parser.error('First argument must be the full path to the zookeeper node to create (eg: /services/db)')
 
     if args.verbose:
         level = logging.DEBUG
@@ -62,12 +75,22 @@ def main():
         zookeeper.set_debug_level(zookeeper.LOG_LEVEL_WARN)
     else:
         level = logging.INFO
-        zookeeper.set_debug_level(zookeeper.LOG_LEVEL_INFO)
+        zookeeper.set_debug_level(zookeeper.LOG_LEVEL_WARN)
 
     logging.basicConfig(level=level, format='%(asctime)s %(levelname)s %(message)s')
 
     try:
+        if args.zknode[0] is not "/":
+            parser.error('First argument must be the full path to the zookeeper node to create (eg: /services/db)')
+    except AttributeError:
+        # the subcommand have no znode
+        pass
+
+    try:
         conf = Conf(args.conf, args.format)
+    except AttributeError:
+        # the subcommand have no conf
+        pass
     except ValueError, e:
         parser.error(e)
         exit(1)
@@ -84,9 +107,35 @@ def main():
     farmer = ZkFarmer(zkconn)
 
     if args.command == 'export':
-        farmer.export(conf, args.zknode)
+        def updated_handler():
+            if args.changed_cmd:
+                os.system(args.changed_cmd)
+        farmer.export(args.zknode, conf, updated_handler)
+
     elif args.command == 'join':
-        farmer.join(conf, args.zknode)
+        farmer.join(args.zknode, conf)
+
+    elif args.command == 'ls':
+        fields = args.fields.split(',') if args.fields else []
+
+        for name in farmer.list(args.zknode):
+            info = farmer.get('%s/%s' % (args.zknode.rstrip('/'), name), fields)
+            if info:
+                fields_data = []
+                for key, val in info.items():
+                    if val == dict:
+                        continue
+                    fields_data.append('='.join([key, val]))
+                print '%-20s %s' % (name[0:20], ', '.join(fields_data))
+            else:
+                print name
+
+    elif args.command == 'get':
+        print farmer.get(args.zknode, args.field)
+
+    elif args.command == 'set':
+        farmer.set(args.zknode, args.field, args.value)
+
     else:
         parser.error('Unsupported command: %s' % args.command)
 

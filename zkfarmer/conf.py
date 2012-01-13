@@ -44,13 +44,15 @@ class ConfBase(object):
 
 
 class ConfJSON(ConfBase):
-    def write(self, obj):
-        with open(self.file_path, 'w') as fd:
-            json.dump(obj, fd)
-
     def read(self):
         with open(self.file_path) as fd:
             return json.load(fd.read())
+
+    def write(self, obj):
+        if self.read() == obj:
+            return
+        with open(self.file_path, 'w') as fd:
+            json.dump(obj, fd)
 
 
 class ConfPHP(ConfBase):
@@ -97,6 +99,10 @@ class ConfDir(ConfBase):
             if type(val) == str or type(val) == int or type(val) == unicode:
                 if os.path.isdir(entry_path):
                     shutil.rmtree(entry_path)
+                elif os.path.exists(entry_path):
+                    with open(entry_path) as fd:
+                        if fd.read() == val:
+                            continue
                 with open(entry_path, 'w') as fd:
                     fd.write(val)
             elif type(val) == dict:
