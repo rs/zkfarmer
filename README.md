@@ -3,27 +3,27 @@ ZooKeeper Farmer
 
 ZkFarmer is a set of tools to easily manage distributed server farms using [Apache ZooKeeper](http://zookeeper.apache.org/).
 
-With ZkFarmer, each server registers themself in one or several farms. Thru this registration, they can expose arbitrary information about their status.
+With ZkFarmer, each server registers itself in one or several farms. Thru this registration, hosts can expose arbitrary information about their status.
 
-On the other end, ZkFarmer helps consumers of the farm to maintain a configuration file in sync with the list of nodes registered in the farm with their respective exposed configuration.
+On the other end, ZkFarmer helps consumers of the farm to maintain a configuration file in sync with the list of hosts registered in the farm with their respective configuration.
 
-In the middle, ZkFarmer helps monitoring and administrative services to easily change the configuration of each node.
+In the middle, ZkFarmer helps monitoring and administrative services to easily read and change the configuration of each host.
 
 Connecting to Zookeeper
 -----------------------
 
-All subcommands of `zkfarmer` needs the full list of you ZooKeeper cluster hosts. You can either pass the list of ZooKeeper hosts via the `ZKHOST` environment variable or via the `--host` parameter. Hosts are host:port pairs separated by comms. All examples in this documentation assumes you have you ZooKeeper hosts configured in your environment.
+All subcommands of `zkfarmer` needs the full list of your ZooKeeper cluster hosts. You can either pass the list of ZooKeeper hosts via the `ZKHOST` environment variable or via the `--host` parameter. Hosts are host:port pairs separated by commas. All examples in this documentation assume you have your ZooKeeper hosts configured in your environment.
 
 Joining a Farm
 --------------
 
-The `zkfarmer join` command is used on each node to register itself into a farm. The command will create an `ephemeral` node in zookeeper that will live until the program isn't killed. As this command will never return, you should start it as a service using something like `upstart`, `daemontools` or `launchd`.
+The `zkfarmer join` command is used on each host to register itself in a farm. The command will create an `ephemeral` znode in ZooKeeper that will live until the program isn't killed. As this command will never return, you should start it as a service using something like `upstart`, `daemontools` or `launchd`. If the host crash or if you kill `zkfarmer`, the host's znode will be automatically removed by ZooKeeper.
 
-This command takes two arguments, `farm path` and `conf path`. The `farm path` is the path to an existing znode on the ZooKeeper server used to list all node of a given farm.
+This command takes two arguments, `farm path` and `conf path`. The `farm path` is the path to an existing znode on the ZooKeeper server used to store the hosts of a given farm.
 
-The `conf path` is the path to the local configuration to be associated with the node. This configuration can be JSON or PHP file or a DJB like directory configuration. DJB directory is the prefered format for this configuration as it offers better flexibility. With a DJB like directory configuration format, each directory is a dictionary and file a key with contents of the file as value.
+The `conf path` is the path to the local configuration to be associated with the host. This configuration can be a JSON file or a DJB like directory configuration. DJB directory is the preferred format for this configuration as it offers better flexibility. With a DJB like directory configuration format, each directory is a dictionary and each file is a key with its contents as value.
 
-Once started, the content of the local configuration is transformed into JSON and stored in an `ephemeral` node in ZooKeeper. The node is named after the IP of the host assigned to the default route.
+Once started, the content of the local configuration is transformed into JSON and stored in an `ephemeral` znode on ZooKeeper. The znode is named after the IP of the host assigned to the default route.
 
 Lets start the following command from the 1.2.3.4 host:
 
@@ -36,7 +36,7 @@ Lets assume `/var/service/db` is a directory containing the following structure:
     mysql/
       replication_delay
 
-The `zkfarmer join` command transformed it to the following JSON object and stored it into `/services/db/1.2.3.4`:
+The `zkfarmer join` command transformed it to the following JSON object and stored it the `/services/db/1.2.3.4` znode:
 
     {
       "hostname": "db-01.example.com",
@@ -44,16 +44,16 @@ The `zkfarmer join` command transformed it to the following JSON object and stor
       "mysql": {"replication_delay": "0"}
     }
 
-While the `zkfarmer join` command is running, this node will be maintained up to date with local configuration and vis versa. You can `echo 1 > /var/service/db/enabled` from the node, the change will be immediately reflected into the ZooKeeper node JSON content. Any change on the content of node in ZooKeeper will also update the local configuration on the node.
+While the `zkfarmer join` command is running, this znode will be maintained up to date with local configuration and vis versa. For instance if you do an `echo 1 > /var/service/db/enabled` from the host, the change will be immediately reflected into the znode JSON content. Any change on the content of the znode will also update the local configuration on the host.
 
-Synced Farm Configuration
--------------------------
+Syncing Farm Configuration
+--------------------------
 
-On the other end, consumer of the service provided by a farm may not have the ability to keep a permanent connection to zookeeper in order to maintain an up-to-date view of the farm state. ZkFarmer can do this by maintaining a local configuration file. PHP and JSON formats are currently supported, more formats may come in the future.
+On the other end, consumers of the service provided by a farm may not have the ability to keep a permanent connection to ZooKeeper in order to maintain an up-to-date view of the farm state. ZkFarmer can do this for you by maintaining local configuration file reflecting the current status of the farm. PHP and JSON formats are currently supported, more formats may come in the future.
 
-To do this, use the `zkfarmer export` command. As for the `join` command, it will run forever so you may launch it as a service. While the command is running, the destination configuration file will be synchronized with the content of the farm.
+To do this, use the `zkfarmer export` command. As for the `join` command, it will run forever so you may launch it as a service. While the command is running, the destination configuration file will be synchronized with the content of the farm in real time.
 
-Lets take our previous `/services/db` farm. Running the `zkfarm export /services/db /data/web/conf/database.php` will export and maintain the `/data/web/conf/database.php` file with the follwoing content:
+Lets take our previous `/services/db` farm. Running the `zkfarm export /services/db /data/web/conf/database.php` will export and maintain the `/data/web/conf/database.php` file with the followoing content:
 
     <?php
     return array
@@ -73,16 +73,16 @@ Lets take our previous `/services/db` farm. Running the `zkfarm export /services
         ...
     );
 
-Additionnaly, you can ask ZkFarmer to execute a command each time the configuration is updated. This command can, for instance, flush some cache, reload the conf in your application etc.
+Additionnaly, you can ask ZkFarmer to execute a command each time the configuration is updated. This command can, for instance, flush some cache, reload the conf file in your application etc.
 
-Manage Farms
-------------
+Managing Farms
+--------------
 
 ZkFarmer comes with some other commands to list, read and write farms content.
 
-### List farms and nodes
+### List farms and hosts
 
-The `zkfarm ls` command let you list nodes in ZooKeeper. If the listed node contains ZkFarmer maintained node, you can also list nodes with some of their values:
+The `zkfarm ls` command let you list znodes in ZooKeeper. If the listed znode contains ZkFarmer maintained host information, it can also show some fields associated to each listed host:
 
 You can list all the farms you stored in `/services`:
 
@@ -92,24 +92,26 @@ You can list all the farms you stored in `/services`:
     search
     soft
 
-You can explore the status of nodes in a farm:
+You can explore the status of hosts in a farm:
 
-    $ zkfarmer ls /services/db --fields enabled,hostname
+    $ zkfarmer ls /services/db --fields hostname,enabled
     1.2.3.4          hostname=db-01.example.com, enabled=0
     1.2.3.5          hostname=db-02.example.com, enabled=1
     ...
 
 To dump sub-fields, use dotted notation (ex: mysql.replication_delay).
 
-### Get field of node
+### Retrieve an host field
 
-The `zkfarm get` can return the value of a given field of a node:
+The `zkfarm get` can return the value of a given field for a host:
 
     $ zkfarmer get /services/db/1.2.3.4 enabled
     0
 
-### Set field of a node
+### Edit an host field
 
-You can also change the field of a node from anywhere on your network:
+You can also change the value of field for a given host from anywhere on your network like this:
 
     $ zkfarmer set /services/db/1.2.3.4 enabled 1
+
+The local configuration on the host will immediately get updated as well as all consumers currently exporting this farm.
