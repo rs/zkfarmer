@@ -37,7 +37,7 @@ class ZkFarmer(object):
             for f in field_or_fields:
                 fields[f] = dict_get_path(info, f)
             return fields
-        elif type(field_or_fields) == str or type(field_or_fields) == unicode:
+        elif isinstance(field_or_fields, (str, unicode)):
             return dict_get_path(info, field_or_fields)
         else:
             raise TypeError('Invalid type for field path: %s' % type(field_or_fields))

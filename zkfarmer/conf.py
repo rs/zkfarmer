@@ -64,7 +64,7 @@ class ConfPHP(ConfBase):
     def _dump(self, value):
         if type(value) == int:
             return value
-        elif type(value) == str or type(value) == unicode:
+        elif isinstance(value, (str, unicode)):
             return '"%s"' % self._quotemeta(value)
         elif type(value) == dict:
             return 'array(%s)' % ','.join(['"%s" => %s' % (self._quotemeta(key), self._dump(val)) for key, val in value.items()])
@@ -96,7 +96,7 @@ class ConfDir(ConfBase):
 
         for key, val in obj.items():
             entry_path = os.path.join(path, key)
-            if type(val) == str or type(val) == int or type(val) == unicode:
+            if isinstance(val, (str, unicode, int)):
                 if os.path.isdir(entry_path):
                     shutil.rmtree(entry_path)
                 elif os.path.exists(entry_path):
