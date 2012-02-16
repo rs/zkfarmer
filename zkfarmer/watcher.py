@@ -9,6 +9,7 @@ from utils import serialize, unserialize
 from socket import socket, gethostname, AF_INET, SOCK_DGRAM
 from watchdog.observers import Observer
 import zookeeper
+import zc.zk
 import logging
 import threading
 
@@ -59,8 +60,6 @@ class ZkFarmExporter(ZkFarmWatcher):
 
 
 class ZkFarmJoiner(ZkFarmWatcher):
-    ZOO_OPEN_ACL_UNSAFE = {"perms": 0x1f, "scheme": "world", "id": "anyone"}
-
     def __init__(self, zkconn, root_node_path, conf):
         super(ZkFarmJoiner, self).__init__()
         self.update_remote_timer = None
@@ -75,7 +74,8 @@ class ZkFarmJoiner(ZkFarmWatcher):
         info['hostname'] = gethostname()
         conf.write(info)
 
-        zkconn.create(self.node_path, serialize(conf.read()), [self.ZOO_OPEN_ACL_UNSAFE], zookeeper.EPHEMERAL)
+        zkconn.create_recursive(root_node_path, '', zc.zk.OPEN_ACL_UNSAFE)
+        zkconn.create(self.node_path, serialize(conf.read()), zc.zk.OPEN_ACL_UNSAFE, zookeeper.EPHEMERAL)
 
         observer = Observer()
         observer.schedule(self, path=conf.file_path, recursive=True)

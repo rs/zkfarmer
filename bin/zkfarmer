@@ -17,7 +17,7 @@ import logging
 
 
 def main():
-    from zktools.connection import ZkConnection
+    import zc.zk
     import argparse
     from signal import signal, SIGTERM, SIGINT
 
@@ -74,7 +74,7 @@ def main():
         level = logging.WARN
         zookeeper.set_debug_level(zookeeper.LOG_LEVEL_WARN)
     else:
-        level = logging.INFO
+        level = logging.WARN
         zookeeper.set_debug_level(zookeeper.LOG_LEVEL_WARN)
 
     logging.basicConfig(level=level, format='%(asctime)s %(levelname)s %(message)s')
@@ -95,7 +95,7 @@ def main():
         parser.error(e)
         exit(1)
 
-    zkconn = ZkConnection(host=args.host)
+    zkconn = zc.zk.ZooKeeper(args.host)
 
     def sighandler(sig, frame):
         zkconn.close()

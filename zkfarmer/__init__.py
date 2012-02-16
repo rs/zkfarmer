@@ -21,7 +21,6 @@ class ZkFarmer(object):
         ZkFarmExporter(self.zkconn, zknode, conf, updated_handler)
 
     def list(self, zknode):
-        self.zkconn.connect()
         return self.zkconn.get_children(zknode)
 
     def get(self, zknode, field_or_fields):
