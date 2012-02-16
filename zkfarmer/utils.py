@@ -20,7 +20,6 @@ def unserialize(serialized):
             raise TypeError('Not a dict')
         return data
     except:
-        logging.warn('Cannot unserialize: %s' % serialized)
         return {}
 
 

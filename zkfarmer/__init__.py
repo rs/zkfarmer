@@ -25,12 +25,7 @@ class ZkFarmer(object):
 
     def get(self, zknode, field_or_fields):
         data = self.zkconn.get(zknode)[0]
-        try:
-            info = unserialize(data)
-            if type(info) != dict:
-                raise ValueError()
-        except ValueError:
-            info = data
+        info = unserialize(data)
         if type(field_or_fields) == list:
             fields = {}
             for f in field_or_fields:
@@ -45,12 +40,7 @@ class ZkFarmer(object):
         retry = 3
         while retry:
             data = self.zkconn.get(zknode)
-            try:
-                info = unserialize(data[0])
-                if type(info) != dict:
-                    raise ValueError()
-            except ValueError:
-                info = {}
+            info = unserialize(data[0])
             dict_set_path(info, field, value)
             try:
                 self.zkconn.set(zknode, serialize(info), data[1]['version'])
