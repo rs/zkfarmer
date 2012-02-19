@@ -38,29 +38,42 @@ def main():
     subparsers = parser.add_subparsers(title='subcommands', dest='command')
     subparsers.add_parser('join')
 
-    join_parser = subparsers.add_parser('join', help='make the current host to join a farm')
+    join_parser = subparsers.add_parser('join',
+                                        help='make the current host to join a farm',
+                                        description='Make the current host to join a farm.')
     join_parser.add_argument('zknode', help='the ZooKeeper node path of the farm')
     join_parser.add_argument('conf', help='Path to the node configuration')
-    join_parser.add_argument('-f', '--format', dest='format', choices=['json', 'php', 'dir'],
-                             help='set the configuration format (supported formats: json, php, dir)')
+    join_parser.add_argument('-f', '--format', dest='format', choices=['json', 'yaml', 'php', 'dir'],
+                             help='set the configuration format')
 
-    export_parser = subparsers.add_parser('export', help='exports and maintain a representation of the current farm status to a local configuration file')
+    export_parser = subparsers.add_parser('export',
+                                          help='exports and maintain farm\'s nodes configuration',
+                                          description='Export and maintain a representation of the current farm\' nodes\' list ' +
+                                          'with configuration to a local configuration file.')
     export_parser.add_argument('zknode', help='the ZooKeeper node path to the farm')
     export_parser.add_argument('conf', help='path to the local configuration')
-    export_parser.add_argument('-f', '--format', dest='format', choices=['json', 'php', 'dir'],
-                               help='set the configuration format (supported formats: json, php, dir)')
+    export_parser.add_argument('-f', '--format', dest='format', choices=['json', 'yaml', 'php', 'dir'],
+                               help='set the configuration format')
     export_parser.add_argument('-c', '--changed-cmd', dest='changed_cmd', metavar='CMD',
                                help='a command to be executed each time the configuration change')
 
-    list_parser = subparsers.add_parser('ls', help='get the list of nodes')
+    list_parser = subparsers.add_parser('ls', help='get the list of nodes', description='Get the list of nodes.')
     list_parser.add_argument('zknode', help='the ZooKeeper node path to the farm')
     list_parser.add_argument('--fields', help='list of node fields to output separated by commas')
 
-    get_parser = subparsers.add_parser('get', help='get the value of a field of a given node')
+    get_parser = subparsers.add_parser('get',
+                                       help='get the node information',
+                                       description='Get node information. If the optional <field> is specified, ' +
+                                       'return the node\'s field\'s value. Otherwise, dump the whole node configuration ' +
+                                       'using the specified format.')
     get_parser.add_argument('zknode', help='the ZooKeeper node path to the farm')
-    get_parser.add_argument('field', help='the path of the field to return')
+    get_parser.add_argument('field', nargs='?', default='*', help='the path of the field to return')
+    get_parser.add_argument('-f', '--format', dest='format', choices=['json', 'yaml', 'php'], default='yaml',
+                            help='set the configuration format (default is yaml)')
 
-    set_parser = subparsers.add_parser('set', help='set the value of a field of a given node')
+    set_parser = subparsers.add_parser('set',
+                                       help='set the value of a field of a given node',
+                                       description='Set the value of a field of a given node.')
     set_parser.add_argument('zknode', help='the ZooKeeper node path to the farm')
     set_parser.add_argument('field', help='the path of the field to set')
     set_parser.add_argument('value', help='the new value')
@@ -132,7 +145,12 @@ def main():
             print name
 
     elif args.command == 'get':
-        print farmer.get(args.zknode, args.field)
+        if args.field == '*':
+            conf = Conf('-', args.format)
+            info = farmer.get(args.zknode)
+            conf.write(info)
+        else:
+            print farmer.get(args.zknode, args.field)
 
     elif args.command == 'set':
         farmer.set(args.zknode, args.field, args.value)

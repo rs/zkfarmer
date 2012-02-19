@@ -7,34 +7,53 @@
 
 import os
 import os.path
+import sys
 import shutil
 import json
+import yaml
+
+# Prevent unstandard !!python/unicode prefixes
+yaml.add_representer(unicode, lambda dumper, value: dumper.represent_scalar(u'tag:yaml.org,2002:str', value))
 
 
 def Conf(file, format=None):
     if format:
-        if format is 'json':
+        if format == 'json':
             return ConfJSON(file)
-        elif format is 'php':
+        elif format == 'yaml':
+            return ConfYAML(file)
+        elif format == 'php':
             return ConfPHP(file)
-        elif format is 'dir':
+        elif format == 'dir':
             return ConfDir(file)
         else:
             raise ValueError('Unsupported format: %s' % format)
     else:
         if os.path.isdir(file):
             return ConfDir(file)
-        elif os.path.splitext(file)[1] == '.json':
-            return ConfJSON(file)
-        elif os.path.splitext(file)[1] == '.php':
-            return ConfPHP(file)
-        else:
-            raise ValueError('Cannot detect file format')
+            ext = os.path.splitext(file)[1]
+            if ext == '.json':
+                return ConfJSON(file)
+            elif ext == '.yaml':
+                return ConfYAML(file)
+            elif ext == '.php':
+                return ConfPHP(file)
+            else:
+                raise ValueError('Cannot detect file format')
 
 
 class ConfBase(object):
     def __init__(self, file_path):
         self.file_path = file_path
+
+    def open(self, write=False):
+        if self.file_path == '-':
+            if write:
+                return sys.stdout
+            else:
+                raise NotImplementedError('Cannot read configuration from stdin')
+        mode = 'w' if write else 'r'
+        return open(self.file_path, mode)
 
     def read(self):
         raise NotImplementedError('%s.read()' % self.__class__.__name__)
@@ -45,14 +64,32 @@ class ConfBase(object):
 
 class ConfJSON(ConfBase):
     def read(self):
-        with open(self.file_path) as fd:
+        with self.open() as fd:
             return json.load(fd.read())
 
     def write(self, obj):
-        if self.read() == obj:
-            return
-        with open(self.file_path, 'w') as fd:
+        try:
+            if self.read() == obj:
+                return
+        except NotImplementedError:
+            pass
+        with self.open(write=True) as fd:
             json.dump(obj, fd)
+
+
+class ConfYAML(ConfBase):
+    def read(self):
+        with self.open() as fd:
+            return yaml.load(fd.read())
+
+    def write(self, obj):
+        try:
+            if self.read() == obj:
+                return
+        except NotImplementedError:
+            pass
+        with self.open(write=True) as fd:
+            yaml.dump(obj, fd, default_flow_style=False, allow_unicode=True)
 
 
 class ConfPHP(ConfBase):
@@ -74,7 +111,7 @@ class ConfPHP(ConfBase):
             raise TypeError('php_dump: cannot serialize value: %s' % type(value))
 
     def write(self, obj):
-        with open(self.file_path, 'w') as fd:
+        with self.open(write=True) as fd:
             fd.write('<?php return %s;' % self._dump(obj))
 
 

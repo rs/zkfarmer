@@ -23,10 +23,12 @@ class ZkFarmer(object):
     def list(self, zknode):
         return self.zkconn.get_children(zknode)
 
-    def get(self, zknode, field_or_fields):
+    def get(self, zknode, field_or_fields=None):
         data = self.zkconn.get(zknode)[0]
         info = unserialize(data)
-        if type(field_or_fields) == list:
+        if field_or_fields is None:
+            return info
+        elif type(field_or_fields) == list:
             fields = {}
             for f in field_or_fields:
                 fields[f] = dict_get_path(info, f)
