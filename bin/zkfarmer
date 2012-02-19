@@ -119,16 +119,17 @@ def main():
         fields = args.fields.split(',') if args.fields else []
 
         for name in farmer.list(args.zknode):
-            info = farmer.get('%s/%s' % (args.zknode.rstrip('/'), name), fields)
-            if info:
-                fields_data = []
-                for key, val in info.items():
-                    if val == dict:
-                        continue
-                    fields_data.append('='.join([key, val]))
-                print '%-20s %s' % (name[0:20], ', '.join(fields_data))
-            else:
-                print name
+            if fields:
+                info = farmer.get('%s/%s' % (args.zknode.rstrip('/'), name), fields)
+                if info:
+                    fields_data = []
+                    for key, val in info.items():
+                        if val == dict:
+                            continue
+                        fields_data.append('='.join([key, val]))
+                    print '%-20s %s' % (name[0:20], ', '.join(fields_data))
+                    continue
+            print name
 
     elif args.command == 'get':
         print farmer.get(args.zknode, args.field)
