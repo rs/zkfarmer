@@ -25,7 +25,7 @@ class ZkFarmer(object):
 
     def get(self, zknode, field_or_fields=None):
         data = self.zkconn.get(zknode)[0]
-        return dict_filter(unserialize(data))
+        return dict_filter(unserialize(data), field_or_fields)
 
     def set(self, zknode, field, value):
         retry = 3
