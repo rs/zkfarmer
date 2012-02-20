@@ -40,49 +40,52 @@ def main():
     subparsers = parser.add_subparsers(title='subcommands', dest='command')
     subparsers.add_parser('join')
 
-    join_parser = subparsers.add_parser('join',
-                                        help='make the current host to join a farm',
-                                        description='Make the current host to join a farm.')
-    join_parser.add_argument('zknode', help='the ZooKeeper node path of the farm')
-    join_parser.add_argument('conf', help='Path to the node configuration')
-    join_parser.add_argument('-f', '--format', dest='format', choices=['json', 'yaml', 'php', 'dir'],
-                             help='set the configuration format')
+    # The `join' sub-command
+    subparser = subparsers.add_parser('join', help='make the current host to join a farm',
+                                      description='Make the current host to join a farm.')
+    subparser.add_argument('zknode', help='the ZooKeeper node path of the farm')
+    subparser.add_argument('conf', help='Path to the node configuration')
+    subparser.add_argument('-f', '--format', dest='format', choices=['json', 'yaml', 'php', 'dir'],
+                           help='set the configuration format')
 
-    export_parser = subparsers.add_parser('export',
-                                          help='exports and maintain farm\'s nodes configuration',
-                                          description='Export and maintain a representation of the current farm\' nodes\' list ' +
-                                          'with configuration to a local configuration file.')
-    export_parser.add_argument('zknode', help='the ZooKeeper node path to the farm')
-    export_parser.add_argument('conf', help='path to the local configuration')
-    export_parser.add_argument('-f', '--format', dest='format', choices=['json', 'yaml', 'php', 'dir'],
-                               help='set the configuration format')
-    export_parser.add_argument('-c', '--changed-cmd', dest='changed_cmd', metavar='CMD',
-                               help='a command to be executed each time the configuration change')
-    export_parser.add_argument('-F', '--filters', dest='filters',
-                               help='filter out nodes which doesn\'t match supplied predicates separeted by commas (ex: enabled=0,replication_delay<10,!maintenance)')
+    # The `export' sub-command
+    subparser = subparsers.add_parser('export', help='exports and maintain farm\'s nodes configuration',
+                                      description='Export and maintain a representation of the current farm\' nodes\' list ' +
+                                                  'with configuration to a local configuration file.')
+    subparser.add_argument('zknode', help='the ZooKeeper node path to the farm')
+    subparser.add_argument('conf', help='path to the local configuration')
+    subparser.add_argument('-f', '--format', dest='format', choices=['json', 'yaml', 'php', 'dir'],
+                           help='set the configuration format')
+    subparser.add_argument('-c', '--changed-cmd', dest='changed_cmd', metavar='CMD',
+                           help='a command to be executed each time the configuration change')
+    subparser.add_argument('-F', '--filters', dest='filters',
+                           help='filter out nodes which doesn\'t match supplied predicates separeted by commas ' +
+                                '(ex: enabled=0,replication_delay<10,!maintenance)')
 
-    list_parser = subparsers.add_parser('ls', help='get the list of nodes', description='Get the list of nodes.')
-    list_parser.add_argument('zknode', help='the ZooKeeper node path to the farm')
-    list_parser.add_argument('--fields', help='list of node fields to output separated by commas')
-    list_parser.add_argument('-F', '--filters', dest='filters',
-                             help='filter out nodes which doesn\'t match supplied predicates separeted by commas (ex: enabled=0,replication_delay<10,!maintenance)')
+    # The `ls' sub-command
+    subparser = subparsers.add_parser('ls', help='get the list of nodes', description='Get the list of nodes.')
+    subparser.add_argument('zknode', help='the ZooKeeper node path to the farm')
+    subparser.add_argument('--fields', help='list of node fields to output separated by commas')
+    subparser.add_argument('-F', '--filters', dest='filters',
+                           help='filter out nodes which doesn\'t match supplied predicates separeted by commas ' +
+                                '(ex: enabled=0,replication_delay<10,!maintenance)')
 
-    get_parser = subparsers.add_parser('get',
-                                       help='get the node information',
-                                       description='Get node information. If the optional <field> is specified, ' +
-                                       'return the node\'s field\'s value. Otherwise, dump the whole node configuration ' +
-                                       'using the specified format.')
-    get_parser.add_argument('zknode', help='the ZooKeeper node path to the farm')
-    get_parser.add_argument('field', nargs='?', default='*', help='the path of the field to return')
-    get_parser.add_argument('-f', '--format', dest='format', choices=['json', 'yaml', 'php'], default='yaml',
-                            help='set the configuration format (default is yaml)')
+    # The `get' sub-command
+    subparser = subparsers.add_parser('get', help='get the node information',
+                                      description='Get node information. If the optional <field> is specified, ' +
+                                                  'return the node\'s field\'s value. Otherwise, dump the whole node configuration ' +
+                                                  'using the specified format.')
+    subparser.add_argument('zknode', help='the ZooKeeper node path to the farm')
+    subparser.add_argument('field', nargs='?', default='*', help='the path of the field to return')
+    subparser.add_argument('-f', '--format', dest='format', choices=['json', 'yaml', 'php'], default='yaml',
+                           help='set the configuration format (default is yaml)')
 
-    set_parser = subparsers.add_parser('set',
-                                       help='set the value of a field of a given node',
-                                       description='Set the value of a field of a given node.')
-    set_parser.add_argument('zknode', help='the ZooKeeper node path to the farm')
-    set_parser.add_argument('field', help='the path of the field to set')
-    set_parser.add_argument('value', help='the new value')
+    # The `set' sub-command
+    subparser = subparsers.add_parser('set', help='set the value of a field of a given node',
+                                      description='Set the value of a field of a given node.')
+    subparser.add_argument('zknode', help='the ZooKeeper node path to the farm')
+    subparser.add_argument('field', help='the path of the field to set')
+    subparser.add_argument('value', help='the new value')
 
     args = parser.parse_args()
 
