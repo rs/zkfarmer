@@ -50,7 +50,7 @@ class ConfBase(object):
     def open(self, write=False):
         if self.file_path == '-':
             if write:
-                return sys.stdout
+                return open('/dev/stdin', 'w')
             else:
                 raise NotImplementedError('Cannot read configuration from stdin')
         mode = 'w' if write else 'r'
