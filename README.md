@@ -67,13 +67,29 @@ Lets take our previous `/services/db` farm. Running the `zkfarm export /services
         "1.2.3.5" => array
         (
             "hostname" => "db-02.example.com",
-            "enabled" => "0",
+            "enabled" => "1",
             "mysql" => array("replication_delay" => "1"),
         ),
         ...
     );
 
 Additionnaly, you can ask ZkFarmer to execute a command each time the configuration is updated. This command can, for instance, flush some cache, reload the conf file in your application etc.
+
+It's possible to filter out some nodes from the exported configuration if it matches certain criteria so you don't have to filter them out at reading. The `--filters` parameter can be used to the that. A filter predicate is a field path followed by a comparison operator and a valud. Supported operator are one of `=`, `!=`, `>`, `<`, `>=`, `<=`. A predicate containing only a field path can be used to ensure the field is present whatever its value. A field path prefixed by a `!` means the oposite.
+
+Lets take our previous `/services/db` farm. Running the `zkfarm export --filters enabled=1 /services/db /data/web/conf/database.php` will export and maintain the `/data/web/conf/database.php` file with the followoing content:
+
+    <?php
+    return array
+    (
+        "1.2.3.5" => array
+        (
+            "hostname" => "db-02.example.com",
+            "enabled" => "1",
+            "mysql" => array("replication_delay" => "1"),
+        ),
+        ...
+    );
 
 Managing Farms
 --------------
@@ -115,3 +131,28 @@ You can also change the value of field for a given host from anywhere on your ne
     $ zkfarmer set /services/db/1.2.3.4 enabled 1
 
 The local configuration on the host will immediately get updated as well as all consumers currently exporting this farm.
+
+### Farm properties
+
+The `zkfarmer set` and `zkfarmer get` commands can be used to store and read properties of a farm. This can be useful for monitoring tools for instance. You could store the minimum number of working nodes required before to throw an alert. To do that, you need two properties, `min_nodes` and `working_filter` for instance:
+
+    $ zkfarmer set /services/db min_node 30
+    $ zkfarmer set /services/db working_filter enabled=1
+
+Then to check the health of a service, run the following nagios compatible script:
+
+    #!/bin/sh
+
+    farm=$1
+    min_node=$(zkfarmer get $farm min_node)
+    working_filters=$(zkfarmer get $farm working_filters)
+    if [ $(kfarmer ls --filters $working_filters $farm | wc -l) -gt $min_node ]
+    then
+        echo "OK"
+    else
+        echo "CRITICAL"
+    fi
+
+Run it as follow:
+
+    $ zkfarmer_check /services/db

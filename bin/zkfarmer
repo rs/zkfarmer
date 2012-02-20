@@ -71,19 +71,19 @@ def main():
                                 '(ex: enabled=0,replication_delay<10,!maintenance)')
 
     # The `get' sub-command
-    subparser = subparsers.add_parser('get', help='get the node information',
-                                      description='Get node information. If the optional <field> is specified, ' +
-                                                  'return the node\'s field\'s value. Otherwise, dump the whole node configuration ' +
+    subparser = subparsers.add_parser('get', help='get the node or farm information',
+                                      description='Get node or farm information. If the optional <field> is specified, ' +
+                                                  'return the field\'s value. Otherwise, dump the whole configuration ' +
                                                   'using the specified format.')
-    subparser.add_argument('zknode', help='the ZooKeeper node path to the farm')
+    subparser.add_argument('zknode', help='the ZooKeeper node path to the farm or node')
     subparser.add_argument('field', nargs='?', default='*', help='the path of the field to return')
     subparser.add_argument('-f', '--format', dest='format', choices=['json', 'yaml', 'php'], default='yaml',
                            help='set the configuration format (default is yaml)')
 
     # The `set' sub-command
-    subparser = subparsers.add_parser('set', help='set the value of a field of a given node',
-                                      description='Set the value of a field of a given node.')
-    subparser.add_argument('zknode', help='the ZooKeeper node path to the farm')
+    subparser = subparsers.add_parser('set', help='set the value of a field of a given node or farm',
+                                      description='Set the value of a field of a given node or farm.')
+    subparser.add_argument('zknode', help='the ZooKeeper node path to the farm or node')
     subparser.add_argument('field', help='the path of the field to set')
     subparser.add_argument('value', help='the new value')
 
