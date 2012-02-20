@@ -11,7 +11,9 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/..')
 
 from zkfarmer.conf import Conf
+from zkfarmer.utils import create_filter, dict_filter
 from zkfarmer import ZkFarmer
+
 import zookeeper
 import logging
 
@@ -56,10 +58,14 @@ def main():
                                help='set the configuration format')
     export_parser.add_argument('-c', '--changed-cmd', dest='changed_cmd', metavar='CMD',
                                help='a command to be executed each time the configuration change')
+    export_parser.add_argument('-F', '--filters', dest='filters',
+                               help='filter out nodes which doesn\'t match supplied predicates separeted by commas (ex: enabled=0,replication_delay<10,!maintenance)')
 
     list_parser = subparsers.add_parser('ls', help='get the list of nodes', description='Get the list of nodes.')
     list_parser.add_argument('zknode', help='the ZooKeeper node path to the farm')
     list_parser.add_argument('--fields', help='list of node fields to output separated by commas')
+    list_parser.add_argument('-F', '--filters', dest='filters',
+                             help='filter out nodes which doesn\'t match supplied predicates separeted by commas (ex: enabled=0,replication_delay<10,!maintenance)')
 
     get_parser = subparsers.add_parser('get',
                                        help='get the node information',
@@ -123,20 +129,23 @@ def main():
         def updated_handler():
             if args.changed_cmd:
                 os.system(args.changed_cmd)
-        farmer.export(args.zknode, conf, updated_handler)
+        farmer.export(args.zknode, conf, updated_handler, args.filters)
 
     elif args.command == 'join':
         farmer.join(args.zknode, conf)
 
     elif args.command == 'ls':
         fields = args.fields.split(',') if args.fields else []
+        filter_handler = create_filter(args.filters)
 
         for name in farmer.list(args.zknode):
-            if fields:
-                info = farmer.get('%s/%s' % (args.zknode.rstrip('/'), name), fields)
+            if fields or args.filters:
+                info = farmer.get('%s/%s' % (args.zknode.rstrip('/'), name))
+                if args.filters and not filter_handler(info):
+                    continue
                 if info:
                     fields_data = []
-                    for key, val in info.items():
+                    for key, val in dict_filter(info, fields).items():
                         if val == dict:
                             continue
                         fields_data.append('='.join([key, val]))

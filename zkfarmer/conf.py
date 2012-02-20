@@ -31,6 +31,7 @@ def Conf(file, format=None):
     else:
         if os.path.isdir(file):
             return ConfDir(file)
+        else:
             ext = os.path.splitext(file)[1]
             if ext == '.json':
                 return ConfJSON(file)

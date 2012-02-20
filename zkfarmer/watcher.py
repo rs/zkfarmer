@@ -32,7 +32,7 @@ class ZkFarmWatcher(object):
 
 
 class ZkFarmExporter(ZkFarmWatcher):
-    def __init__(self, zkconn, root_node_path, conf, updated_handler):
+    def __init__(self, zkconn, root_node_path, conf, updated_handler=None, filter_handler=None):
         super(ZkFarmExporter, self).__init__()
         self.watched_paths = {}
 
@@ -42,9 +42,12 @@ class ZkFarmExporter(ZkFarmWatcher):
                 new_conf = {}
                 for name in node_names:
                     subnode_path = '%s/%s' % (root_node_path, name)
-                    new_conf[name] = unserialize(zkconn.get(subnode_path, self.get_watcher(subnode_path))[0])
+                    info = unserialize(zkconn.get(subnode_path, self.get_watcher(subnode_path))[0])
+                    if not filter_handler or filter_handler(info):
+                        new_conf[name] = info
                 conf.write(new_conf)
-                updated_handler()
+                if updated_handler:
+                    updated_handler()
                 self.wait()
 
     def watcher(self, handle, type, state, path):

@@ -7,7 +7,7 @@
 
 from watcher import ZkFarmJoiner, ZkFarmExporter
 from zookeeper import BadVersionException
-from utils import serialize, unserialize, dict_get_path, dict_set_path
+from utils import serialize, unserialize, dict_set_path, dict_filter, create_filter
 
 
 class ZkFarmer(object):
@@ -17,26 +17,15 @@ class ZkFarmer(object):
     def join(self, zknode, conf):
         ZkFarmJoiner(self.zkconn, zknode, conf)
 
-    def export(self, zknode, conf, updated_handler=None):
-        ZkFarmExporter(self.zkconn, zknode, conf, updated_handler)
+    def export(self, zknode, conf, updated_handler=None, filters=None):
+        ZkFarmExporter(self.zkconn, zknode, conf, updated_handler, filter_handler=create_filter(filters))
 
     def list(self, zknode):
         return self.zkconn.get_children(zknode)
 
     def get(self, zknode, field_or_fields=None):
         data = self.zkconn.get(zknode)[0]
-        info = unserialize(data)
-        if field_or_fields is None:
-            return info
-        elif type(field_or_fields) == list:
-            fields = {}
-            for f in field_or_fields:
-                fields[f] = dict_get_path(info, f)
-            return fields
-        elif isinstance(field_or_fields, (str, unicode)):
-            return dict_get_path(info, field_or_fields)
-        else:
-            raise TypeError('Invalid type for field path: %s' % type(field_or_fields))
+        return dict_filter(unserialize(data))
 
     def set(self, zknode, field, value):
         retry = 3
