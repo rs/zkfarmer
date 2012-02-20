@@ -87,6 +87,22 @@ def main():
     subparser.add_argument('field', help='the path of the field to set')
     subparser.add_argument('value', help='the new value')
 
+    # The `check' sub-command
+    subparser = subparsers.add_parser('check', help='check the health of a given farm',
+                                      description='Check a farm health regarding the number of failed node and return nagios compatible output. ' +
+                                                  'Failed node are max farm node - currently healthy nodes. ' +
+                                                  'Healthy nodes are by default all nodes currently in the farm. ' +
+                                                  'You may edit the `running_filter\' farm property to filter out nodes maching ' +
+                                                  'criteria to counter as healthy node. ' +
+                                                  'The farm max node is stored in the `size\' farm property and is ' +
+                                                  'raised by the `join\' command with the farm is extended.' +
+                                                  'If you shrink the farm, you may edit this property by hand.')
+    subparser.add_argument('zknode', help='the ZooKeeper node path to the farm')
+    subparser.add_argument('-c', '--max-failed-node', default='10%',
+                           help='the max allowed number of failed nodes, can be a number or a percentage (default 10%%)')
+    subparser.add_argument('-w', '--warn-failed-node',
+                           help='if defined, number of failed node at which a warning will be returned (must be lower than MAX_FAILED_NODE)')
+
     args = parser.parse_args()
 
     if args.verbose:
@@ -166,6 +182,20 @@ def main():
 
     elif args.command == 'set':
         farmer.set(args.zknode, args.field, args.value)
+
+    elif args.command == 'check':
+        (status, reason) = farmer.check(args.zknode, args.max_failed_node, args.warn_failed_node)
+        if status == farmer.STATUS_OK:
+            label = 'OK'
+        elif status == farmer.STATUS_WARNING:
+            label = 'WARNING'
+        elif status == farmer.STATUS_CRITICAL:
+            label = 'CRITICAL'
+        elif status == farmer.STATUS_UNKNOWN:
+            label = 'UNKNOWN'
+
+        print '%s: %s' % (label, reason)
+        exit(status)
 
     else:
         parser.error('Unsupported command: %s' % args.command)

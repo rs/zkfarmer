@@ -11,10 +11,20 @@ from utils import serialize, unserialize, dict_set_path, dict_filter, create_fil
 
 
 class ZkFarmer(object):
+    STATUS_OK = 0
+    STATUS_WARNING = 1
+    STATUS_CRITICAL = 2
+    STATUS_UNKNOWN = 3
+
     def __init__(self, zkconn):
         self.zkconn = zkconn
 
     def join(self, zknode, conf):
+        # If we are going to enlarged the farm max seen size, store it
+        current_size = len(self.list(zknode)) + 1
+        if current_size > self.get(zknode, 'size'):
+            self.set(zknode, 'size', current_size)
+        # Join the farm
         ZkFarmJoiner(self.zkconn, zknode, conf)
 
     def export(self, zknode, conf, updated_handler=None, filters=None):
@@ -40,3 +50,42 @@ class ZkFarmer(object):
                 # remove value changed since I get it, retry with fresh value
                 retry = retry - 1
                 pass
+
+    def check(self, zknode, max_failed_node, warn_failed_node=None):
+        props = self.get(zknode)
+
+        if 'size' not in props:
+            return (self.STATUS_UNKNOWN, "No `size' property found for `%s' farm" % zknode)
+        size = props['size']
+        running = 0
+
+        try:
+            max_failed = size * float(max_failed_node[0:-1]) / 100 if max_failed_node[-1] == '%' else int(max_failed_node)
+        except ValueError:
+            return (self.STATUS_UNKNOWN, "Invalid `max_failed_node' argument format: %s" % max_failed_node)
+        if warn_failed_node:
+            try:
+                warn_failed = size * float(warn_failed_node[0:-1]) / 100 if warn_failed_node[-1] == '%' else int(warn_failed_node)
+            except ValueError:
+                return (self.STATUS_UNKNOWN, "Invalid `warn_failed_node' argument format: %s" % warn_failed_node)
+        else:
+            warn_failed = None
+
+        if 'running_filter' in props:
+            filter_handler = create_filter(props['running_filter'])
+            for name in self.list(zknode):
+                info = self.get('%s/%s' % (zknode.rstrip('/'), name))
+                if filter_handler(info):
+                    running += 1
+        else:
+            running = len(self.list(zknode))
+
+        failed = size - running
+        if failed >= max_failed:
+            status = self.STATUS_CRITICAL
+        elif warn_failed and failed >= warn_failed:
+            status = self.STATUS_WARNING
+        else:
+            status = self.STATUS_OK
+
+        return (status, "%d/%d nodes running, %d nodes failing, max allowed %s" % (running, size, failed, max_failed_node))

@@ -134,10 +134,10 @@ The local configuration on the host will immediately get updated as well as all 
 
 ### Farm properties
 
-The `zkfarmer set` and `zkfarmer get` commands can be used to store and read properties of a farm. This can be useful for monitoring tools for instance. You could store the minimum number of working nodes required before to throw an alert. To do that, you need two properties, `min_nodes` and `working_filter` for instance:
+The `zkfarmer set` and `zkfarmer get` commands can be used to store and read properties of a farm. This can be useful for monitoring tools for instance. You could store the minimum number of working nodes required before to throw an alert. To do that, you need two properties, `min_nodes` and `running_filter` for instance:
 
     $ zkfarmer set /services/db min_node 30
-    $ zkfarmer set /services/db working_filter enabled=1
+    $ zkfarmer set /services/db running_filter enabled=1
 
 Then to check the health of a service, run the following nagios compatible script:
 
@@ -145,14 +145,28 @@ Then to check the health of a service, run the following nagios compatible scrip
 
     farm=$1
     min_node=$(zkfarmer get $farm min_node)
-    working_filters=$(zkfarmer get $farm working_filters)
+    running_filter=$(zkfarmer get $farm running_filter)
     if [ $(kfarmer ls --filters $working_filters $farm | wc -l) -gt $min_node ]
     then
         echo "OK"
     else
         echo "CRITICAL"
+        exit 2
     fi
 
 Run it as follow:
 
     $ zkfarmer_check /services/db
+
+Fortunately, you don't have to write this yourself as zkfarmer implements it own `check` command. Instead of `min_node` property, zkfarmer maintain a `size` property representing the maximum ever seen number of node in the cluster. You don't have to maintain this property by hand as zkfarmer will raise it each time a node is added to the farm. You may need to update it if you shrink your farm though.
+
+The `zkfarmer check` command takes a maximum number of failed node as argument. This number could be an absolute number or a percentage of the farm. The default value is 10%. By default, all node which joined the farm will be counted as `running` nodes, but this is certainly not what you want. To inform zkfarmer how to detect running nodes, you may set the `running_filter` farm property with any number of predicates you need.
+
+Here is an example of usage:
+
+    $ zkfarmer get /services/db
+    size: 17
+    running_filter: 'enabled=1,running=1,mysql.replication_delay<60'
+
+    $ zkfarmer check /services/db
+    OK: 16/17 nodes running, 1 nodes failing, max allowed 10%
