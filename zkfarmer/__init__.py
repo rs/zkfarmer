@@ -7,6 +7,7 @@
 
 from watcher import ZkFarmJoiner, ZkFarmExporter
 from zookeeper import BadVersionException
+import zc.zk
 from utils import serialize, unserialize, dict_set_path, dict_filter, create_filter
 
 
@@ -20,6 +21,8 @@ class ZkFarmer(object):
         self.zkconn = zkconn
 
     def join(self, zknode, conf):
+        # Create farms ZkNode if doesn't already exists
+        self.zkconn.create_recursive(zknode, '', zc.zk.OPEN_ACL_UNSAFE)
         # If we are going to enlarged the farm max seen size, store it
         current_size = len(self.list(zknode)) + 1
         if current_size > self.get(zknode, 'size'):

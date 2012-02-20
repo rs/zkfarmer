@@ -77,7 +77,6 @@ class ZkFarmJoiner(ZkFarmWatcher):
         info['hostname'] = gethostname()
         conf.write(info)
 
-        zkconn.create_recursive(root_node_path, '', zc.zk.OPEN_ACL_UNSAFE)
         zkconn.create(self.node_path, serialize(conf.read()), zc.zk.OPEN_ACL_UNSAFE, zookeeper.EPHEMERAL)
 
         observer = Observer()
