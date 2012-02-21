@@ -78,11 +78,11 @@ def match_predicates(predicates, the_dict):
     return True
 
 
-def create_filter(filter):
-    if not filter:
+def create_filter(filters):
+    if not filters:
         return lambda a_dict: True
     predicates = []
-    for f in filter.split(','):
+    for f in filters.replace(' ', '').split(','):
         predicate = {}
         match = re.split('(!?[^><!=]+)(?:(>=|<=|!=|=|<|>)(.*))?', f, 2)
         predicate['path'] = match[1]
