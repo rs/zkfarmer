@@ -46,6 +46,21 @@ The `zkfarmer join` command transformed it to the following JSON object and stor
 
 While the `zkfarmer join` command is running, this znode will be maintained up to date with local configuration and vis versa. For instance if you do an `echo 1 > /var/service/db/enabled` from the host, the change will be immediately reflected into the znode JSON content. Any change on the content of the znode will also update the local configuration on the host.
 
+Usage for the `zkfarmer join` command:
+
+    usage: zkfarmer join [-h] [-f {json,yaml,php,dir}] zknode conf
+
+    Make the current host to join a farm.
+
+    positional arguments:
+      zknode                the ZooKeeper node path of the farm
+      conf                  Path to the node configuration
+
+    optional arguments:
+      -h, --help            show this help message and exit
+      -f {json,yaml,php,dir}, --format {json,yaml,php,dir}
+                            set the configuration format
+
 Syncing Farm Configuration
 --------------------------
 
@@ -90,6 +105,30 @@ Lets take our previous `/services/db` farm. Running the `zkfarm export --filters
         ),
         ...
     );
+
+Usage for the `zkfarmer export` command:
+
+    usage: zkfarmer export [-h] [-f {json,yaml,php,dir}] [-c CMD] [-F FILTERS]
+                           zknode conf
+
+    Export and maintain a representation of the current farm' nodes' list with
+    configuration to a local configuration file.
+
+    positional arguments:
+      zknode                the ZooKeeper node path to the farm
+      conf                  path to the local configuration
+
+    optional arguments:
+      -h, --help            show this help message and exit
+      -f {json,yaml,php,dir}, --format {json,yaml,php,dir}
+                            set the configuration format
+      -c CMD, --changed-cmd CMD
+                            a command to be executed each time the configuration
+                            change
+      -F FILTERS, --filters FILTERS
+                            filter out nodes which doesn't match supplied
+                            predicates separeted by commas (ex:
+                            enabled=0,replication_delay<10,!maintenance)
 
 Managing Farms
 --------------
@@ -158,7 +197,42 @@ Run it as follow:
 
     $ zkfarmer_check /services/db
 
-Fortunately, you don't have to write this yourself as zkfarmer implements it own `check` command. Instead of `min_node` property, zkfarmer maintain a `size` property representing the maximum ever seen number of node in the cluster. You don't have to maintain this property by hand as zkfarmer will raise it each time a node is added to the farm. You may need to update it if you shrink your farm though.
+
+Usage for the `zkfarmer set` command:
+
+    usage: zkfarmer set [-h] zknode field value
+
+    Set the value of a field of a given node or farm.
+
+    positional arguments:
+      zknode      the ZooKeeper node path to the farm or node
+      field       the path of the field to set
+      value       the new value
+
+    optional arguments:
+      -h, --help  show this help message and exit
+
+Usage for the `zkfarmer get` command:
+
+    usage: zkfarmer get [-h] [-f {json,yaml,php}] zknode [field]
+
+    Get node or farm information. If the optional <field> is specified, return the
+    field's value. Otherwise, dump the whole configuration using the specified
+    format.
+
+    positional arguments:
+      zknode                the ZooKeeper node path to the farm or node
+      field                 the path of the field to return
+
+    optional arguments:
+      -h, --help            show this help message and exit
+      -f {json,yaml,php}, --format {json,yaml,php}
+                            set the configuration format (default is yaml)
+
+Farm Monitoring
+---------------
+
+Fortunately, you don't have to write the above script by yourself, zkfarmer implements it own monitoring system thru the `check` command. Instead of `min_node` property, zkfarmer maintain a `size` property representing the maximum ever seen number of node in the cluster. You don't have to maintain this property by hand as zkfarmer will raise it each time a node is added to the farm. You may need to update it if you shrink your farm though.
 
 The `zkfarmer check` command takes a maximum number of failed node as argument. This number could be an absolute number or a percentage of the farm. The default value is 10%. By default, all node which joined the farm will be counted as `running` nodes, but this is certainly not what you want. To inform zkfarmer how to detect running nodes, you may set the `running_filter` farm property with any number of predicates you need.
 
@@ -170,3 +244,72 @@ Here is an example of usage:
 
     $ zkfarmer check /services/db
     OK: 16/17 nodes running, 1 nodes failing, max allowed 10%
+
+Usage for the `zkfarmer check` command:
+
+    usage: zkfarmer check [-h] [-c MAX_FAILED_NODE] [-w WARN_FAILED_NODE] zknode
+
+    Check a farm health regarding the number of failed node and return nagios
+    compatible output. Failed node are max farm node - currently healthy nodes.
+    Healthy nodes are by default all nodes currently in the farm. You may edit the
+    `running_filter' farm property to filter out nodes maching criteria to counter
+    as healthy node. The farm max node is stored in the `size' farm property and
+    is raised by the `join' command with the farm is extended.If you shrink the
+    farm, you may edit this property by hand.
+
+    positional arguments:
+      zknode                the ZooKeeper node path to the farm
+
+    optional arguments:
+      -h, --help            show this help message and exit
+      -c MAX_FAILED_NODE, --max-failed-node MAX_FAILED_NODE
+                            the max allowed number of failed nodes, can be a
+                            number or a percentage (default 10%)
+      -w WARN_FAILED_NODE, --warn-failed-node WARN_FAILED_NODE
+                            if defined, number of failed node at which a warning
+                            will be returned (must be lower than MAX_FAILED_NODE)
+
+Farm State Aware Command Execution
+----------------------------------
+
+Not implemented yet
+
+Usage for the `zkfarmer exec` command:
+
+    usage: zkfarmer exec [-h] [-l LOCK_NAME] [-c CONCURRENCY] [-s SET]
+                         [-a ALLOWED_HOUR_RANGES] [-r DELAY]
+                         zknode
+
+    This sub-command executes a local command in respect to various farm
+    conditions and block until all conditions aren't met (will block forever if
+    `--repeat' option is used). A lock can be acquired before to execute the
+    command and can require that no more than N other clients aquired the lock
+    before the local command is executed. A node property can be changed as soon
+    as the command is executed, and restored to its previous value as soon command
+    exit. The command can be prevented from being launched until the farm isn't
+    healthy (see the `check' sub-command). Black hours can be set to prevent the
+    command from being executed during peak hours. The command can be executed
+    repetidely with given minimum delay between executions with respect to all
+    other defined constraints.
+
+    positional arguments:
+      zknode                the ZooKeeper node path to the farm
+
+    optional arguments:
+      -h, --help            show this help message and exit
+      -l LOCK_NAME, --lock LOCK_NAME
+                            acquires a lock before to execute the command
+      -c CONCURRENCY, --concurrency CONCURRENCY
+                            allow N other concurrent clients to acquire the same
+                            lock (default 1)
+      -s SET, --set SET     set a node field just before execution and restore it
+                            once done (foramt field.path=value
+      -a ALLOWED_HOUR_RANGES, --allowed-hour-ranges ALLOWED_HOUR_RANGES
+                            Ranges of hours between when the command can be
+                            launched, outside of those range, this command will
+                            block until next allowed range.
+      -r DELAY, --repeat DELAY
+                            repeat the command with a minimum delay of DELAY in
+                            respect of other conditions (this option makes the
+                            command to block forever, you should use something
+                            like upstart to launch it

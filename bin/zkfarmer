@@ -103,6 +103,30 @@ def main():
     subparser.add_argument('-w', '--warn-failed-node',
                            help='if defined, number of failed node at which a warning will be returned (must be lower than MAX_FAILED_NODE)')
 
+    # The `exec' sub-command
+    subparser = subparsers.add_parser('exec', help='execute a local command',
+                                      description='This sub-command executes a local command in respect to various farm conditions and block ' +
+                                                  'until all conditions aren\'t met (will block forever if `--repeat\' option is used). ' +
+                                                  'A lock can be acquired before to execute the command and can require that no more than ' +
+                                                  'N other clients aquired the lock before the local command is executed. ' +
+                                                  'A node property can be changed as soon as the command is executed, and restored to its ' +
+                                                  'previous value as soon command exit. ' +
+                                                  'The command can be prevented from being launched until the farm isn\'t healthy (see the ' +
+                                                  '`check\' sub-command). ' +
+                                                  'Black hours can be set to prevent the command from being executed during peak hours. ' +
+                                                  'The command can be executed repetidely with given minimum delay between executions with ' +
+                                                  'respect to all other defined constraints.')
+    subparser.add_argument('zknode', help='the ZooKeeper node path to the farm')
+    subparser.add_argument('-l', '--lock', metavar='LOCK_NAME', help='acquires a lock before to execute the command')
+    subparser.add_argument('-c', '--concurrency', default=1, help='allow N other concurrent clients to acquire the same lock (default 1)')
+    subparser.add_argument('-s', '--set', help='set a node field just before execution and restore it once done (foramt field.path=value')
+    subparser.add_argument('-a', '--allowed-hour-ranges', default='0-24',
+                           help='Ranges of hours between when the command can be launched, outside of those range, this command will block ' +
+                                'until next allowed range.')
+    subparser.add_argument('-r', '--repeat', metavar='DELAY', help='repeat the command with a minimum delay of DELAY in respect of other ' +
+                                                                   'conditions (this option makes the command to block forever, you should ' +
+                                                                   'use something like upstart to launch it')
+
     args = parser.parse_args()
 
     if args.verbose:
@@ -196,6 +220,9 @@ def main():
 
         print '%s: %s' % (label, reason)
         exit(status)
+
+    elif args.command == 'exec':
+        raise NotImplementedError('This sub-command is not implemented yet')
 
     else:
         parser.error('Unsupported command: %s' % args.command)
