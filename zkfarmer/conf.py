@@ -95,6 +95,7 @@ class ConfYAML(ConfBase):
 
 class ConfPHP(ConfBase):
     meta = {'"': '\\"', "\0": "\\\0", "\n": "\\n", "\\": "\\\\"}
+    indent = '    '
 
     def _quotemeta(self, value):
         return ''.join(self.meta.get(c, c) for c in value)
@@ -105,7 +106,9 @@ class ConfPHP(ConfBase):
         elif isinstance(value, (str, unicode)):
             return '"%s"' % self._quotemeta(value)
         elif type(value) == dict:
-            return 'array(\n%s\n)' % ( ',\n'.join(['%s"%s" => %s' % (lvl*'\t', self._quotemeta(key), self._dump(val, lvl+2)) for key, val in value.items()]))
+            indent = lvl * self.indent
+            body = ',\n'.join(['%s"%s" => %s' % (indent + self.indent, self._quotemeta(key), self._dump(val, lvl + 1)) for key, val in value.items()])
+            return 'array\n%s(\n%s\n%s)' % (indent, body, indent)
         elif type(value) == list:
             return 'array(%s)' % ','.join([self._dump(val) for val in value])
         else:
