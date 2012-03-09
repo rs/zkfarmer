@@ -99,13 +99,13 @@ class ConfPHP(ConfBase):
     def _quotemeta(self, value):
         return ''.join(self.meta.get(c, c) for c in value)
 
-    def _dump(self, value):
+    def _dump(self, value, lvl=0):
         if type(value) == int:
             return value
         elif isinstance(value, (str, unicode)):
             return '"%s"' % self._quotemeta(value)
         elif type(value) == dict:
-            return 'array(%s)' % ','.join(['"%s" => %s' % (self._quotemeta(key), self._dump(val)) for key, val in value.items()])
+            return 'array(\n%s\n)' % ( ',\n'.join(['%s"%s" => %s' % (lvl*'\t', self._quotemeta(key), self._dump(val, lvl+2)) for key, val in value.items()]))
         elif type(value) == list:
             return 'array(%s)' % ','.join([self._dump(val) for val in value])
         else:
