@@ -7,7 +7,6 @@
 
 import os
 import os.path
-import sys
 import shutil
 import json
 import yaml
@@ -123,12 +122,19 @@ class ConfDir(ConfBase):
     def _parse(self, path):
         struct = {}
         for entry in os.listdir(path):
+            if entry[0] is '.':
+                # Ignore UNIX "invisible files"
+                continue
             entry_path = os.path.join(path, entry)
             if os.path.isdir(entry_path):
                 struct[entry] = self._parse(entry_path)
             else:
                 with open(entry_path) as fd:
-                    struct[entry] = fd.read().strip()
+                    try:
+                        struct[entry] = fd.read().strip().encode('utf-8')
+                    except UnicodeDecodeError:
+                        # ignore invalid utf-8 files
+                        pass
         return struct
 
     def _dump(self, obj, path):
