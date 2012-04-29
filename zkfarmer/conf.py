@@ -64,8 +64,9 @@ class ConfBase(object):
 
 class ConfJSON(ConfBase):
     def read(self):
-        with self.open() as fd:
-            return json.load(fd.read())
+        if os.path.exists(self.file_path):
+            with self.open() as fd:
+                return json.load(fd)
 
     def write(self, obj):
         try:
@@ -79,8 +80,9 @@ class ConfJSON(ConfBase):
 
 class ConfYAML(ConfBase):
     def read(self):
-        with self.open() as fd:
-            return yaml.load(fd.read())
+        if os.path.exists(self.file_path):
+            with self.open() as fd:
+                return yaml.load(fd)
 
     def write(self, obj):
         try:
