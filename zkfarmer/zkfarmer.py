@@ -5,10 +5,11 @@
 # For the full copyright and license information, please view the LICENSE
 # file that was distributed with this source code.
 
-from watcher import ZkFarmJoiner, ZkFarmExporter
 from zookeeper import BadVersionException
 import zc.zk
-from utils import serialize, unserialize, dict_set_path, dict_filter, create_filter
+
+from .utils import serialize, unserialize, dict_set_path, dict_filter, create_filter
+from .watcher import ZkFarmJoiner, ZkFarmExporter
 
 
 class ZkFarmer(object):
