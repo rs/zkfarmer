@@ -5,14 +5,15 @@
 # For the full copyright and license information, please view the LICENSE
 # file that was distributed with this source code.
 
-from utils import serialize, unserialize
-from socket import socket, gethostname, AF_INET, SOCK_DGRAM
-from watchdog.observers import Observer
-import zookeeper
-import zc.zk
 import logging
 import threading
+from socket import socket, gethostname, AF_INET, SOCK_DGRAM
 
+import zookeeper
+import zc.zk
+from watchdog.observers import Observer
+
+from .utils import serialize, unserialize
 
 class ZkFarmWatcher(object):
     def __init__(self):
