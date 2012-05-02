@@ -43,6 +43,14 @@ def Conf(file, format=None):
 
 
 class ConfBase(object):
+    def read(self):
+        raise NotImplementedError('%s.read()' % self.__class__.__name__)
+
+    def write(self, obj):
+        raise NotImplementedError('%s.write()' % self.__class__.__name__)
+
+
+class ConfFile(ConfBase):
     def __init__(self, file_path):
         self.file_path = file_path
 
@@ -55,14 +63,8 @@ class ConfBase(object):
         mode = 'w' if write else 'r'
         return open(self.file_path, mode)
 
-    def read(self):
-        raise NotImplementedError('%s.read()' % self.__class__.__name__)
 
-    def write(self, obj):
-        raise NotImplementedError('%s.write()' % self.__class__.__name__)
-
-
-class ConfJSON(ConfBase):
+class ConfJSON(ConfFile):
     def read(self):
         if os.path.exists(self.file_path):
             with self.open() as fd:
@@ -78,7 +80,7 @@ class ConfJSON(ConfBase):
             json.dump(obj, fd)
 
 
-class ConfYAML(ConfBase):
+class ConfYAML(ConfFile):
     def read(self):
         if os.path.exists(self.file_path):
             with self.open() as fd:
@@ -94,7 +96,7 @@ class ConfYAML(ConfBase):
             yaml.dump(obj, fd, default_flow_style=False, allow_unicode=True)
 
 
-class ConfPHP(ConfBase):
+class ConfPHP(ConfFile):
     meta = {'"': '\\"', "\0": "\\\0", "\n": "\\n", "\\": "\\\\"}
     indent = '    '
 
@@ -120,7 +122,7 @@ class ConfPHP(ConfBase):
             fd.write('<?php return %s;' % self._dump(obj))
 
 
-class ConfDir(ConfBase):
+class ConfDir(ConfFile):
     def _parse(self, path):
         struct = {}
         for entry in os.listdir(path):
