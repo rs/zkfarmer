@@ -9,11 +9,12 @@ import logging
 import threading
 from socket import socket, gethostname, AF_INET, SOCK_DGRAM
 
-import zookeeper
+from zookeeper import EPHEMERAL, NoNodeException
 import zc.zk
 from watchdog.observers import Observer
 
 from .utils import serialize, unserialize
+
 
 class ZkFarmWatcher(object):
     def __init__(self):
@@ -39,7 +40,11 @@ class ZkFarmExporter(ZkFarmWatcher):
 
         while True:
             with self.cv:
-                node_names = zkconn.get_children(root_node_path, self.get_watcher(root_node_path))
+                try:
+                    node_names = zkconn.get_children(root_node_path, self.get_watcher(root_node_path))
+                except NoNodeException:
+                    zkconn.create_recursive(root_node_path, '', zc.zk.OPEN_ACL_UNSAFE)
+                    continue
                 new_conf = {}
                 for name in node_names:
                     subnode_path = '%s/%s' % (root_node_path, name)
@@ -60,7 +65,7 @@ class ZkFarmExporter(ZkFarmWatcher):
     def get_watcher(self, path):
         if path not in self.watched_paths:
             self.watched_paths[path] = True
-            return self.watcher
+        return self.watcher
 
 
 class ZkFarmJoiner(ZkFarmWatcher):
@@ -78,7 +83,7 @@ class ZkFarmJoiner(ZkFarmWatcher):
         info['hostname'] = gethostname()
         conf.write(info)
 
-        zkconn.create(self.node_path, serialize(conf.read()), zc.zk.OPEN_ACL_UNSAFE, zookeeper.EPHEMERAL)
+        zkconn.create(self.node_path, serialize(conf.read()), zc.zk.OPEN_ACL_UNSAFE, EPHEMERAL)
 
         observer = Observer()
         observer.schedule(self, path=conf.file_path, recursive=True)

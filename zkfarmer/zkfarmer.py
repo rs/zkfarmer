@@ -5,7 +5,7 @@
 # For the full copyright and license information, please view the LICENSE
 # file that was distributed with this source code.
 
-from zookeeper import BadVersionException
+from zookeeper import BadVersionException, NoNodeException
 import zc.zk
 
 from .utils import serialize, unserialize, dict_set_path, dict_filter, create_filter
@@ -35,10 +35,16 @@ class ZkFarmer(object):
         ZkFarmExporter(self.zkconn, zknode, conf, updated_handler, filter_handler=create_filter(filters))
 
     def list(self, zknode):
-        return self.zkconn.get_children(zknode)
+        try:
+            return self.zkconn.get_children(zknode)
+        except NoNodeException:
+            return []
 
     def get(self, zknode, field_or_fields=None):
-        data = self.zkconn.get(zknode)[0]
+        try:
+            data = self.zkconn.get(zknode)[0]
+        except NoNodeException:
+            return {'size': 0}
         return dict_filter(unserialize(data), field_or_fields)
 
     def set(self, zknode, field, value):
