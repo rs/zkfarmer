@@ -157,7 +157,7 @@ def main():
         parser.error(e)
         exit(1)
 
-    zkconn = zc.zk.ZooKeeper(args.host)
+    zkconn = zc.zk.ZooKeeper(args.host, wait=True)
 
     def sighandler(sig, frame):
         zkconn.close()
