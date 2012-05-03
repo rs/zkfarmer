@@ -4,13 +4,15 @@ import logging
 import re
 
 
+logger = logging.getLogger(__name__)
+
 def serialize(data):
     try:
         if type(data) != dict:
             raise TypeError('Must be a dict')
         return json.dumps(data)
-    except:
-        logging.warn('Cannot serialize: %s' % data)
+    except Exception, e:
+        logger.warn('Cannot serialize: %s [%s]', data, e)
         return '{}'
 
 
@@ -20,7 +22,8 @@ def unserialize(serialized):
         if type(data) != dict:
             raise TypeError('Not a dict')
         return data
-    except:
+    except Exception, e:
+        logger.warn('Cannot unserialize: %s [%s]', serialized, e)
         return {}
 
 
