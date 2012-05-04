@@ -18,7 +18,7 @@ def parse_requirements(file_name):
 
 setup(
     name='zkfarmer',
-    version='0.1.0',
+    version='0.4.0',
     author='Olivier Poitrey',
     author_email='rs@dailymotion.com',
     packages=find_packages(),
