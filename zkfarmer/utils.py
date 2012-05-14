@@ -17,6 +17,8 @@ def serialize(data):
 
 
 def unserialize(serialized):
+    if not serialized:
+        return {}
     try:
         data = json.loads(serialized)
         if type(data) != dict:
