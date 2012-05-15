@@ -17,7 +17,7 @@ All subcommands of `zkfarmer` needs the full list of your ZooKeeper cluster host
 Joining a Farm
 --------------
 
-The `zkfarmer join` command is used on each host to register itself in a farm. The command will create an `ephemeral` znode in ZooKeeper that will live until the program isn't killed. As this command will never return, you should start it as a service using something like `upstart`, `daemontools` or `launchd`. If the host crash or if you kill `zkfarmer`, the host's znode will be automatically removed by ZooKeeper.
+The `zkfarmer join` command is used on each host to register itself in a farm. The command will create an `ephemeral` znode in ZooKeeper that will live until the program is killed. As this command will never return, you should start it as a service using something like `upstart`, `daemontools` or `launchd`. If the host crash or if you kill `zkfarmer`, the host's znode will be automatically removed by ZooKeeper.
 
 This command takes two arguments, `farm path` and `conf path`. The `farm path` is the path to an existing znode on the ZooKeeper server used to store the hosts of a given farm.
 
