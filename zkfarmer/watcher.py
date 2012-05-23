@@ -9,7 +9,7 @@ import logging
 import threading
 from socket import socket, gethostname, AF_INET, SOCK_DGRAM
 
-from zookeeper import EPHEMERAL, NoNodeException
+from zookeeper import EPHEMERAL, NoNodeException, ConnectionLossException
 import zc.zk
 from watchdog.observers import Observer
 
@@ -44,6 +44,9 @@ class ZkFarmExporter(ZkFarmWatcher):
                     node_names = zkconn.get_children(root_node_path, self.get_watcher(root_node_path))
                 except NoNodeException:
                     zkconn.create_recursive(root_node_path, '', zc.zk.OPEN_ACL_UNSAFE)
+                    continue
+                except ConnectionLossException:
+                    self.wait()
                     continue
                 new_conf = {}
                 for name in node_names:
@@ -97,11 +100,14 @@ class ZkFarmJoiner(ZkFarmWatcher):
 
     def dispatch(self, event):
         with self.cv:
-            current_conf = unserialize(self.zkconn.get(self.node_path)[0])
-            new_conf = self.conf.read()
-            if current_conf != new_conf:
-                logging.info('Local conf changed')
-                self.zkconn.set(self.node_path, serialize(new_conf))
+            try:
+                current_conf = unserialize(self.zkconn.get(self.node_path)[0])
+                new_conf = self.conf.read()
+                if current_conf != new_conf:
+                    logging.info('Local conf changed')
+                    self.zkconn.set(self.node_path, serialize(new_conf))
+            except ConnectionLossException:
+                pass
             self.notify()
 
     def node_watcher(self, handle, type, state, path):
