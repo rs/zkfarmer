@@ -9,6 +9,7 @@ import logging
 import threading
 import Queue
 import time
+import itertools
 from socket import socket, gethostname, AF_INET, SOCK_DGRAM
 
 from watchdog.observers import Observer
@@ -29,23 +30,27 @@ class ZkFarmWatcher(object):
 
     def __init__(self, zkconn):
         self.events = Queue.Queue()
+        self.counter = itertools.count()
         self.zkconn = zkconn
         self.zkconn.add_listener(self._zkchange)
 
     def _zkchange(self, state):
         if state == KazooState.CONNECTED:
             logging.info("Now connected to Zookeeper")
-            self.event("connection recovered")
+            self.urgent_event("connection recovered")
         elif state == KazooState.LOST:
             logging.warn("Connection to Zookeeper lost")
-            self.event("connection lost")
+            self.urgent_event("connection lost")
         elif state == KazooState.SUSPENDED:
             logging.warn("Connection to Zookeeper suspended")
-            self.event("connection suspended")
+            self.urgent_event("connection suspended")
 
     def event(self, name, *args):
         """Signal a new event to the main thread"""
-        self.events.put((name, args))
+        self.events.put(((2, next(self.counter)), name, args))
+    def urgent_event(self, name, *args):
+        """Signal a new priority event to the main thread"""
+        self.events.put(((1, next(self.counter)), name, args))
 
     def loop(self):
         self.state = "initial"
@@ -53,7 +58,7 @@ class ZkFarmWatcher(object):
         while True:
             # Process pending events
             try:
-                event, args = self.events.get(True, 10)
+                priority, event, args = self.events.get(True, 10)
             except Queue.Empty:
                 continue
 
@@ -68,19 +73,21 @@ class ZkFarmWatcher(object):
                                                                          event))
             execute = None
             do = True
-            try:
-                execute = getattr(self, "exec_%s" % event.replace(" ", "_"))
-                logging.debug("And execute the appropriate action %r" % execute)
-            except AttributeError:
-                pass
+            execute = getattr(self, "exec_%s_from_%s" % (event.replace(" ", "_"),
+                                                         transition[0].replace(" ", "_")),
+                              None)
+            if execute is None:
+                execute = getattr(self, "exec_%s" % event.replace(" ", "_"),
+                                  None)
             if execute is not None:
                 try:
+                    logging.debug("And execute the appropriate action %r" % execute)
                     if execute(*args) is False:
                         do = False
                     errors = 0
                 except ZookeeperError, e:
                     logging.exception("Got a zookeeper exception, reschedule the transition")
-                    self.event(event, *args)
+                    self.events.put((priority, event, args))
                     do = False
                     errors += 1
                     if errors > 10:
@@ -88,17 +95,36 @@ class ZkFarmWatcher(object):
                         time.sleep(2)
                         errors = 7
             if do:
-                self.state = t[1]
+                self.state = transition[1]
 
 class ZkFarmExporter(ZkFarmWatcher):
 
-    EVENTS = { "initial setup":          [("initial", "idle")],
-               "children modified":      [("idle",    "idle")],
-               "node modified":          [("idle",    "idle")],
-               "connection lost":        [("idle",    "lost")],
-               "connection suspended":   [("idle",    "idle")],
-               "connection recovered":   [("lost",    "initial"),
-                                          ("initial", "initial")]}
+    # States:
+    #   - initial: not ready, initial setup should be done
+    #   - idle: initial setup has been done, ready to accept events
+    #   - suspended: connection to Zookeeper is suspended
+    #   - pending: connection to Zookeeper is suspended and some events
+    #              have been triggered
+    #   - lost: connection to database has been lost
+    EVENTS = { "initial setup":          [("initial",   "idle")],
+               "children modified":      [("idle",      "idle"),
+                                          ("lost",      "lost"),
+                                          ("suspended", "pending"),
+                                          ("pending",   "pending")],
+               "node modified":          [("idle",      "idle"),
+                                          ("lost",      "lost"),
+                                          ("suspended", "pending"),
+                                          ("pending",   "pending")],
+               "connection lost":        [("initial",   "lost"),
+                                          ("idle",      "lost"),
+                                          ("pending",   "lost"),
+                                          ("suspended", "lost")],
+               "connection suspended":   [("idle",      "suspended"),
+                                          ("suspended", "suspended")],
+               "connection recovered":   [("lost",      "initial"),
+                                          ("suspended", "idle"),
+                                          ("pending",   "idle"),
+                                          ("initial",   "initial")] }
 
     def __init__(self, zkconn, root_node_path, conf, updated_handler=None, filter_handler=None):
         super(ZkFarmExporter, self).__init__(zkconn)
@@ -121,6 +147,10 @@ class ZkFarmExporter(ZkFarmWatcher):
         self.monitored.append(path)
         return self.watch_node
 
+    def exec_connection_recovered_from_suspended(self):
+        pass
+    def exec_connection_recovered_from_pending(self):
+        self.event("children modified")
     def exec_connection_recovered(self):
         """The connection is reestablished"""
         logging.info("Connnection with Zookeeper reestablished")
@@ -129,17 +159,20 @@ class ZkFarmExporter(ZkFarmWatcher):
     def exec_initial_setup(self):
         """Watch for new children"""
         self.monitored = []
+        self.root_monitored = False
         try:
             self.zkconn.ensure_path(self.root_node_path, acl=OPEN_ACL_UNSAFE)
         except NodeExistsError:
             pass
         self.event("children modified")
 
-    def exec_children_modified(self, watch=True):
+    def exec_children_modified(self):
+        self.root_monitored = False
+    def exec_children_modified_from_idle(self):
         """A change has occurred on a child"""
         new_conf = {}
         nodes = self.zkconn.get_children(self.root_node_path,
-                                         watch=(watch and self.watch_children))
+                                         watch=(self.root_monitored and None or self.watch_children))
         for name in nodes:
             subnode_path = '%s/%s' % (self.root_node_path, name)
             info = unserialize(self.zkconn.get(subnode_path,
@@ -152,22 +185,38 @@ class ZkFarmExporter(ZkFarmWatcher):
 
     def exec_node_modified(self, what):
         """A change has occurred inside the node"""
-        try:
-            self.monitored.remove(what.path)
-        except ValueError:
-            pass
-        self.event("children modified", False)
-
+        self.monitored.remove(what.path)
+        self.event("children modified")
 
 class ZkFarmJoiner(ZkFarmWatcher):
 
-    EVENTS = { "initial setup":          [("initial", "observer ready")],
+    # States:
+    #   - initial: not ready, all initial setup should be done
+    #   - observer ready: not ready but observer is initialized
+    #   - idle: initial setup has been done, ready to accept events
+    #   - suspended: connection to Zookeeper is suspended
+    #   - pending: connection to Zookeeper is suspended and some events
+    #              have been triggered
+    #   - lost: connection to database has been lost
+    EVENTS = { "initial setup":          [("initial",   "observer ready")],
                "initial znode setup":    [("observer ready", "idle")],
-               "znode modified":         [("idle",    "idle")],
-               "local modified":         [("idle",    "idle")],
-               "connection lost":        [("idle",    "lost")],
-               "connection suspended":   [("idle",    "idle")],
-               "connection recovered":   [("lost",    "observer ready"),
+               "znode modified":         [("idle",      "idle"),
+                                          ("lost",      "lost"),
+                                          ("suspended", "pending"),
+                                          ("pending",   "pending")],
+               "local modified":         [("idle",      "idle"),
+                                          ("lost",      "lost"),
+                                          ("suspended", "pending"),
+                                          ("pending",   "pending")],
+               "connection lost":        [("observer ready", "lost"),
+                                          ("idle",      "lost"),
+                                          ("pending",   "lost"),
+                                          ("suspended", "lost")],
+               "connection suspended":   [("idle",      "suspended"),
+                                          ("suspended", "suspended")],
+               "connection recovered":   [("lost",      "observer ready"),
+                                          ("suspended", "idle"),
+                                          ("pending",   "idle"),
                                           ("observer ready", "observer ready")]}
 
     def __init__(self, zkconn, root_node_path, conf):
@@ -181,6 +230,12 @@ class ZkFarmJoiner(ZkFarmWatcher):
     def watch_node(self, what):
         self.event("znode modified")
 
+    def exec_connection_recovered_from_suspended(self):
+        pass
+    def exec_connection_recovered_from_pending(self):
+        # We didn't want to have too many states, trigger both events
+        self.event("local modified")
+        self.event("znode modified")
     def exec_connection_recovered(self):
         """The connection is reestablished"""
         logging.info("Connnection with Zookeeper reestablished")
@@ -202,13 +257,19 @@ class ZkFarmJoiner(ZkFarmWatcher):
 
     def exec_initial_znode_setup(self):
         """Initial setup of znode"""
-        self.zkconn.create(self.node_path, serialize(self.conf.read()),
-                           acl=OPEN_ACL_UNSAFE, ephemeral=True)
-        # We could catch NodeExistsError but this should not happen
+        try:
+            self.zkconn.create(self.node_path, serialize(self.conf.read()),
+                               acl=OPEN_ACL_UNSAFE, ephemeral=True)
+        except NodeExistsError:
+            # Race condition, may happen
+            pass
         # Setup the watcher
         self.zkconn.get(self.node_path, self.watch_node)
+        self.monitored = True
 
     def exec_local_modified(self):
+        pass
+    def exec_local_modified_from_idle(self):
         """Check a local modification"""
         current_conf = unserialize(self.zkconn.get(self.node_path)[0])
         new_conf = self.conf.read()
@@ -217,11 +278,13 @@ class ZkFarmJoiner(ZkFarmWatcher):
             self.zkconn.set(self.node_path, serialize(new_conf))
 
     def exec_znode_modified(self):
+        self.monitored = False
+    def exec_znode_modified_from_idle(self):
         """Check remote modification"""
         current_conf = self.conf.read()
         try:
             new_conf = unserialize(self.zkconn.get(self.node_path,
-                                                   self.watch_node)[0])
+                                                   watch=(self.monitored and None or self.watch_node))[0])
             if current_conf != new_conf:
                 logging.info('Remote conf changed')
                 self.conf.write(new_conf)
