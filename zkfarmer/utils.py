@@ -74,19 +74,15 @@ def dict_filter(the_dict, field_or_fields=None):
 
 
 def get_operator(op):
-    if op == '==' or op == '=':
-        return operator.eq
-    elif op == '!=':
-        return operator.ne
-    elif op == '>=':
-        return operator.ge
-    elif op == '<=':
-        return operator.le
-    elif op == '>':
-        return operator.gt
-    elif op == '<':
-        return operator.lt
-    else:
+    try:
+        return {"==": operator.eq,
+                "=":  operator.eq,
+                "!=": operator.ne,
+                ">=": operator.ge,
+                "<=": operator.le,
+                ">":  operator.gt,
+                "<":  operator.lt}[op]
+    except KeyError:
         raise ValueError('Unknown operator: %s' % op)
 
 
