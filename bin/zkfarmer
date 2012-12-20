@@ -14,12 +14,11 @@ from zkfarmer.conf import Conf
 from zkfarmer.utils import create_filter, dict_filter, ColorizingStreamHandler
 from zkfarmer import ZkFarmer
 
-import zookeeper
+from kazoo.client import KazooClient
+
 import logging
 
-
 def main():
-    import zc.zk
     import argparse
     from signal import signal, SIGTERM, SIGINT
 
@@ -131,13 +130,10 @@ def main():
 
     if args.verbose:
         level = logging.DEBUG
-        zookeeper.set_debug_level(zookeeper.LOG_LEVEL_DEBUG)
     elif args.quiet:
         level = logging.WARN
-        zookeeper.set_debug_level(zookeeper.LOG_LEVEL_WARN)
     else:
         level = logging.WARN
-        zookeeper.set_debug_level(zookeeper.LOG_LEVEL_WARN)
 
     # Setup a nice logging output
     logger = logging.getLogger()
@@ -160,10 +156,11 @@ def main():
         parser.error(e)
         exit(1)
 
-    zkconn = zc.zk.ZooKeeper(args.host, wait=True)
+    zkconn = KazooClient(args.host, max_retries=-1)
+    zkconn.start()
 
     def sighandler(sig, frame):
-        zkconn.close()
+        zkconn.stop()
         exit()
 
     signal(SIGTERM, sighandler)

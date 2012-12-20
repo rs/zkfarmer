@@ -7,19 +7,29 @@
 
 import logging
 import threading
+import time
 from socket import socket, gethostname, AF_INET, SOCK_DGRAM
 
-from zookeeper import EPHEMERAL, NoNodeException, ConnectionLossException
-import zc.zk
 from watchdog.observers import Observer
 
 from .utils import serialize, unserialize
-
+from kazoo.exceptions import NoNodeError, NodeExistsError, ZookeeperError
+from kazoo.client import KazooState, OPEN_ACL_UNSAFE
 
 class ZkFarmWatcher(object):
-    def __init__(self):
+    def __init__(self, zkconn):
         self.cv = threading.Condition()
         self.handled = False
+        zkconn.add_listener(self.zkchange)
+
+    def zkchange(self, state):
+        if state == KazooState.CONNECTED:
+            logging.info("Handle reconnection to ZooKeeper")
+            try:
+                self.notify()
+            except RuntimeError:
+                # Not blocked
+                pass
 
     def wait(self):
         while True:
@@ -35,23 +45,22 @@ class ZkFarmWatcher(object):
 
 class ZkFarmExporter(ZkFarmWatcher):
     def __init__(self, zkconn, root_node_path, conf, updated_handler=None, filter_handler=None):
-        super(ZkFarmExporter, self).__init__()
+        super(ZkFarmExporter, self).__init__(zkconn)
         self.watched_paths = {}
 
         while True:
             with self.cv:
                 try:
-                    node_names = zkconn.get_children(root_node_path, self.get_watcher(root_node_path))
-                except NoNodeException:
-                    zkconn.create_recursive(root_node_path, '', zc.zk.OPEN_ACL_UNSAFE)
-                    continue
-                except ConnectionLossException:
-                    self.wait()
+                    node_names = zkconn.retry(zkconn.get_children, root_node_path,
+                                              watch=self.get_watcher(root_node_path))
+                except NoNodeError:
+                    zkconn.retry(zkconn.ensure_path, root_node_path, acl=OPEN_ACL_UNSAFE)
                     continue
                 new_conf = {}
                 for name in node_names:
                     subnode_path = '%s/%s' % (root_node_path, name)
-                    info = unserialize(zkconn.get(subnode_path, self.get_watcher(subnode_path))[0])
+                    info = unserialize(zkconn.retry(zkconn.get, subnode_path,
+                                                    watch=self.get_watcher(subnode_path))[0])
                     if not filter_handler or filter_handler(info):
                         new_conf[name] = info
                 conf.write(new_conf)
@@ -59,8 +68,9 @@ class ZkFarmExporter(ZkFarmWatcher):
                     updated_handler()
                 self.wait()
 
-    def watcher(self, handle, type, state, path):
+    def watcher(self, watched):
         with self.cv:
+            path = watched.path
             if path in self.watched_paths:
                 del self.watched_paths[path]
             self.notify()
@@ -73,7 +83,7 @@ class ZkFarmExporter(ZkFarmWatcher):
 
 class ZkFarmJoiner(ZkFarmWatcher):
     def __init__(self, zkconn, root_node_path, conf):
-        super(ZkFarmJoiner, self).__init__()
+        super(ZkFarmJoiner, self).__init__(zkconn)
         self.update_remote_timer = None
         self.update_local_timer = None
 
@@ -86,38 +96,58 @@ class ZkFarmJoiner(ZkFarmWatcher):
         info['hostname'] = gethostname()
         conf.write(info)
 
-        zkconn.create(self.node_path, serialize(conf.read()), zc.zk.OPEN_ACL_UNSAFE, EPHEMERAL)
+        zkconn.retry(zkconn.create,
+                     self.node_path, serialize(conf.read()),
+                     acl=OPEN_ACL_UNSAFE, ephemeral=True)
 
         observer = Observer()
         observer.schedule(self, path=conf.file_path, recursive=True)
         observer.start()
 
-        zkconn.get(self.node_path, self.node_watcher)
+        zkconn.retry(zkconn.get, self.node_path, self.node_watcher)
 
         while True:
             with self.cv:
                 self.wait()
+                try:
+                    zkconn.retry(zkconn.create,
+                                 self.node_path, serialize(conf.read()),
+                                 acl=OPEN_ACL_UNSAFE, ephemeral=True)
+                    zkconn.retry(zkconn.get, self.node_path, self.node_watcher)
+                    logging.info("register again %s" % self.node_path)
+                    self.notify()
+                except NodeExistsError:
+                    pass
 
     def dispatch(self, event):
-        with self.cv:
-            try:
-                current_conf = unserialize(self.zkconn.get(self.node_path)[0])
-                new_conf = self.conf.read()
-                if current_conf != new_conf:
-                    logging.info('Local conf changed')
-                    self.zkconn.set(self.node_path, serialize(new_conf))
-            except ConnectionLossException:
-                pass
-            self.notify()
+        while True:
+            with self.cv:
+                try:
+                    current_conf = unserialize(self.zkconn.retry(self.zkconn.get, self.node_path)[0])
+                    new_conf = self.conf.read()
+                    if current_conf != new_conf:
+                        logging.info('Local conf changed')
+                        self.zkconn.retry(self.zkconn.set, self.node_path, serialize(new_conf))
+                except ZookeeperError, e:
+                    logging.exception("A Zookeeper error happended when dispatching local changes")
+                    time.sleep(5)
+                    continue
+                self.notify()
+                break
 
-    def node_watcher(self, handle, type, state, path):
+    def node_watcher(self, watched):
         with self.cv:
+            path = watched.path
             current_conf = self.conf.read()
-            new_conf = unserialize(self.zkconn.get(self.node_path, self.node_watcher)[0])
-            if current_conf != new_conf:
-                logging.info('Remote conf changed')
-                self.conf.write(new_conf)
-            self.notify()
+            try:
+                new_conf = unserialize(self.zkconn.retry(self.zkconn.get, self.node_path,
+                                                         self.node_watcher)[0])
+                if current_conf != new_conf:
+                    logging.info('Remote conf changed')
+                    self.conf.write(new_conf)
+                self.notify()
+            except NoNodeError:
+                logging.warn("not able to watch for node %s: not exist anymore" % self.node_path)
 
     def myip(self):
         # Try to find default IP
