@@ -3,8 +3,22 @@ import operator
 import logging
 import re
 import time
+from socket import socket, gethostname, AF_INET, SOCK_DGRAM
 
 logger = logging.getLogger(__name__)
+
+def ip():
+    """Find default IP"""
+    ip = None
+    s = socket(AF_INET, SOCK_DGRAM)
+    try:
+        s.connect(('239.255.0.0', 9))
+        ip = s.getsockname()[0]
+    except socket.error:
+        raise RuntimeError("Cannot determine host IP")
+    finally:
+        del s
+    return ip
 
 def serialize(data):
     try:

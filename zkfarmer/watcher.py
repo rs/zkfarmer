@@ -10,11 +10,10 @@ import threading
 import Queue
 import time
 import itertools
-from socket import socket, gethostname, AF_INET, SOCK_DGRAM
 
 from watchdog.observers import Observer
 
-from .utils import serialize, unserialize
+from .utils import serialize, unserialize, ip
 from kazoo.exceptions import NoNodeError, NodeExistsError, ZookeeperError
 from kazoo.client import KazooState, OPEN_ACL_UNSAFE
 
@@ -221,7 +220,7 @@ class ZkFarmJoiner(ZkFarmWatcher):
 
     def __init__(self, zkconn, root_node_path, conf):
         super(ZkFarmJoiner, self).__init__(zkconn)
-        self.node_path = "%s/%s" % (root_node_path, self.grab_ip())
+        self.node_path = "%s/%s" % (root_node_path, ip())
         self.conf = conf
 
         self.event("initial setup")
@@ -245,7 +244,7 @@ class ZkFarmJoiner(ZkFarmWatcher):
         """Non-zookeeper related initial setup"""
         # Force the hostname info key
         info = self.conf.read()
-        info['hostname'] = gethostname()
+        info['hostname'] = ip()
         self.conf.write(info)
 
         # Setup observer
@@ -294,17 +293,3 @@ class ZkFarmJoiner(ZkFarmWatcher):
     def dispatch(self, event):
         """A local change has occured"""
         self.event("local modified")
-
-    def grab_ip(self):
-        # Try to find default IP
-        ip = None
-        s = socket(AF_INET, SOCK_DGRAM)
-        try:
-            s.connect(('239.255.0.0', 9))
-            ip = s.getsockname()[0]
-        except socket.error:
-            logging.error("Cannot determine host IP")
-            exit(1)
-        finally:
-            del s
-        return ip
