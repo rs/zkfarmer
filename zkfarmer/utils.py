@@ -89,6 +89,8 @@ def get_operator(op):
 def match_predicates(predicates, the_dict):
     for predicate in predicates:
         m1, m2 = (dict_get_path(the_dict, predicate['path']), predicate['value'])
+        if m1 is None and m2 is not None:
+            return False
         try:
             int(m1)
             int(m2)
