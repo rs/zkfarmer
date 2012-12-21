@@ -5,12 +5,11 @@
 # For the full copyright and license information, please view the LICENSE
 # file that was distributed with this source code.
 
-from zookeeper import BadVersionException, NoNodeException
-import zc.zk
-
 from .utils import serialize, unserialize, dict_set_path, dict_filter, create_filter
 from .watcher import ZkFarmJoiner, ZkFarmExporter
 
+from kazoo.client import OPEN_ACL_UNSAFE
+from kazoo.exceptions import NoNodeError, BadVersionError
 
 class ZkFarmer(object):
     STATUS_OK = 0
@@ -23,7 +22,7 @@ class ZkFarmer(object):
 
     def join(self, zknode, conf):
         # Create farms ZkNode if doesn't already exists
-        self.zkconn.create_recursive(zknode, '', zc.zk.OPEN_ACL_UNSAFE)
+        self.zkconn.retry(self.zkconn.ensure_path, zknode, acl=OPEN_ACL_UNSAFE)
         # If we are going to enlarged the farm max seen size, store it
         current_size = len(self.list(zknode)) + 1
         if current_size > self.get(zknode, 'size'):
@@ -36,14 +35,14 @@ class ZkFarmer(object):
 
     def list(self, zknode):
         try:
-            return self.zkconn.get_children(zknode)
-        except NoNodeException:
+            return self.zkconn.retry(self.zkconn.get_children, zknode)
+        except NoNodeError:
             return []
 
     def get(self, zknode, field_or_fields=None):
         try:
-            data = self.zkconn.get(zknode)[0]
-        except NoNodeException:
+            data = self.zkconn.retry(self.zkconn.get, zknode)[0]
+        except NoNodeError:
             return {'size': 0}
         return dict_filter(unserialize(data), field_or_fields)
 
@@ -54,9 +53,9 @@ class ZkFarmer(object):
             info = unserialize(data[0])
             dict_set_path(info, field, value)
             try:
-                self.zkconn.set(zknode, serialize(info), data[1]['version'])
+                self.zkconn.retry(self.zkconn.set, zknode, serialize(info), data[1].version)
                 break
-            except BadVersionException:
+            except BadVersionError:
                 # remove value changed since I get it, retry with fresh value
                 retry = retry - 1
                 pass

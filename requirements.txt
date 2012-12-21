@@ -1,5 +1,4 @@
 argparse>=1.2.1
 watchdog>=0.5.4
-zc.zk>=0.7.0
-zkpython>=0.4
 PyYAML>=3.10
+kazoo>=0.8
