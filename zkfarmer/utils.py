@@ -88,7 +88,15 @@ def get_operator(op):
 
 def match_predicates(predicates, the_dict):
     for predicate in predicates:
-        if not predicate['op'](dict_get_path(the_dict, predicate['path']), predicate['value']):
+        m1, m2 = (dict_get_path(the_dict, predicate['path']), predicate['value'])
+        try:
+            int(m1)
+            int(m2)
+            m1 = int(m1)
+            m2 = int(m2)
+        except (ValueError, TypeError):
+            pass
+        if not predicate['op'](m1, m2):
             return False
     return True
 
