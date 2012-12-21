@@ -53,7 +53,7 @@ class ZkFarmer(object):
             info = unserialize(data[0])
             dict_set_path(info, field, value)
             try:
-                self.zkconn.retry(self.zkconn.set, zknode, serialize(info), data[1]['version'])
+                self.zkconn.retry(self.zkconn.set, zknode, serialize(info), data[1].version)
                 break
             except BadVersionError:
                 # remove value changed since I get it, retry with fresh value
