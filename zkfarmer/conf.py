@@ -7,6 +7,7 @@
 
 import os
 import os.path
+import sys
 import shutil
 import json
 import yaml
@@ -57,7 +58,7 @@ class ConfFile(ConfBase):
     def open(self, write=False):
         if self.file_path == '-':
             if write:
-                return open('/dev/stdin', 'w')
+                return sys.stdout
             else:
                 raise NotImplementedError('Cannot read configuration from stdin')
         mode = 'w' if write else 'r'
