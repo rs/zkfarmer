@@ -9,6 +9,7 @@ import threading
 import Queue
 import time
 import itertools
+import os
 
 import logging as _logging
 logger = _logging.getLogger(__name__)
@@ -34,6 +35,7 @@ class ZkFarmWatcher(object):
         self.counter = itertools.count()
         self.zkconn = zkconn
         self.zkconn.add_listener(self._zkchange)
+        self.state = "initial"
 
     def _zkchange(self, state):
         if state == KazooState.CONNECTED:
@@ -53,13 +55,15 @@ class ZkFarmWatcher(object):
         """Signal a new priority event to the main thread"""
         self.events.put(((1, next(self.counter)), name, args))
 
-    def loop(self):
-        self.state = "initial"
+    def loop(self, count=None, timeout=10):
         errors = 0
-        while True:
+        while count is None or count > 0:
+            if count is not None:
+                count -= 1
+
             # Process pending events
             try:
-                priority, event, args = self.events.get(True, 10)
+                priority, event, args = self.events.get(True, timeout=timeout)
             except Queue.Empty:
                 continue
 
@@ -135,7 +139,6 @@ class ZkFarmExporter(ZkFarmWatcher):
         self.filter_handler = filter_handler
 
         self.event("initial setup")
-        self.loop()
 
     def watch_children(self, _):
         self.event("children modified")
@@ -226,7 +229,6 @@ class ZkFarmJoiner(ZkFarmWatcher):
         self.conf = conf
 
         self.event("initial setup")
-        self.loop()
 
     def watch_node(self, what):
         self.event("znode modified")
@@ -259,11 +261,12 @@ class ZkFarmJoiner(ZkFarmWatcher):
     def exec_initial_znode_setup(self):
         """Initial setup of znode"""
         try:
+            self.zkconn.ensure_path(os.path.dirname(self.node_path))
             self.zkconn.create(self.node_path, serialize(self.conf.read()),
                                acl=OPEN_ACL_UNSAFE, ephemeral=True)
         except NodeExistsError:
-            # Race condition, may happen
-            pass
+            # Already exists. Our content is authoritative.
+            self.event("local modified")
         # Setup the watcher
         self.zkconn.get(self.node_path, self.watch_node)
         self.monitored = True

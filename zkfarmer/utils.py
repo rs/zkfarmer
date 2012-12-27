@@ -3,7 +3,7 @@ import operator
 import logging
 import re
 import time
-from socket import socket, gethostname, AF_INET, SOCK_DGRAM
+from socket import socket, AF_INET, SOCK_DGRAM
 
 logger = logging.getLogger(__name__)
 
