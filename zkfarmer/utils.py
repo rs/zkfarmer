@@ -3,8 +3,22 @@ import operator
 import logging
 import re
 import time
+from socket import socket, gethostname, AF_INET, SOCK_DGRAM
 
 logger = logging.getLogger(__name__)
+
+def ip():
+    """Find default IP"""
+    ip = None
+    s = socket(AF_INET, SOCK_DGRAM)
+    try:
+        s.connect(('239.255.0.0', 9))
+        ip = s.getsockname()[0]
+    except socket.error:
+        raise RuntimeError("Cannot determine host IP")
+    finally:
+        del s
+    return ip
 
 def serialize(data):
     try:
@@ -60,25 +74,31 @@ def dict_filter(the_dict, field_or_fields=None):
 
 
 def get_operator(op):
-    if op == '==' or op == '=':
-        return operator.eq
-    elif op == '!=':
-        return operator.ne
-    elif op == '>=':
-        return operator.ge
-    elif op == '<=':
-        return operator.le
-    elif op == '>':
-        return operator.gt
-    elif op == '<':
-        return operator.lt
-    else:
+    try:
+        return {"==": operator.eq,
+                "=":  operator.eq,
+                "!=": operator.ne,
+                ">=": operator.ge,
+                "<=": operator.le,
+                ">":  operator.gt,
+                "<":  operator.lt}[op]
+    except KeyError:
         raise ValueError('Unknown operator: %s' % op)
 
 
 def match_predicates(predicates, the_dict):
     for predicate in predicates:
-        if not predicate['op'](dict_get_path(the_dict, predicate['path']), predicate['value']):
+        m1, m2 = (dict_get_path(the_dict, predicate['path']), predicate['value'])
+        if m1 is None and m2 is not None:
+            return False
+        try:
+            int(m1)
+            int(m2)
+            m1 = int(m1)
+            m2 = int(m2)
+        except (ValueError, TypeError):
+            pass
+        if not predicate['op'](m1, m2):
             return False
     return True
 
