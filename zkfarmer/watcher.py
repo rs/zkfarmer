@@ -7,119 +7,295 @@
 
 import logging
 import threading
+import Queue
+import time
+import itertools
 from socket import socket, gethostname, AF_INET, SOCK_DGRAM
 
-from zookeeper import EPHEMERAL, NoNodeException, ConnectionLossException
-import zc.zk
 from watchdog.observers import Observer
 
 from .utils import serialize, unserialize
-
+from kazoo.exceptions import NoNodeError, NodeExistsError, ZookeeperError
+from kazoo.client import KazooState, OPEN_ACL_UNSAFE
 
 class ZkFarmWatcher(object):
-    def __init__(self):
-        self.cv = threading.Condition()
-        self.handled = False
 
-    def wait(self):
+    # Each subclass should implement a FSM. EVENTS is a
+    # dictionary. Each event is associated to a list of transition. A
+    # transition is a dictionary with a tuple `(src, dst)`
+    # (states). Initial event is always "initial". When a function
+    # "execute_NAME", with NAME being the event, exists, it will be
+    # executed.
+    EVENTS = {}
+
+    def __init__(self, zkconn):
+        self.events = Queue.Queue()
+        self.counter = itertools.count()
+        self.zkconn = zkconn
+        self.zkconn.add_listener(self._zkchange)
+
+    def _zkchange(self, state):
+        if state == KazooState.CONNECTED:
+            logging.info("Now connected to Zookeeper")
+            self.urgent_event("connection recovered")
+        elif state == KazooState.LOST:
+            logging.warn("Connection to Zookeeper lost")
+            self.urgent_event("connection lost")
+        elif state == KazooState.SUSPENDED:
+            logging.warn("Connection to Zookeeper suspended")
+            self.urgent_event("connection suspended")
+
+    def event(self, name, *args):
+        """Signal a new event to the main thread"""
+        self.events.put(((2, next(self.counter)), name, args))
+    def urgent_event(self, name, *args):
+        """Signal a new priority event to the main thread"""
+        self.events.put(((1, next(self.counter)), name, args))
+
+    def loop(self):
+        self.state = "initial"
+        errors = 0
         while True:
-            self.handled = False
-            self.cv.wait(60)
-            if self.handled:
-                break
+            # Process pending events
+            try:
+                priority, event, args = self.events.get(True, 10)
+            except Queue.Empty:
+                continue
 
-    def notify(self):
-        self.handled = True
-        self.cv.notify_all()
-
+            transition = [t for t in self.EVENTS[event] if t[0] == self.state]
+            if not transition:
+                logging.warn("unknown transition for event %r from state %s" % (event,
+                                                                                self.state))
+                continue
+            transition = transition[0]
+            logging.debug("Transition from %r to %r next to event %r" % (transition[0],
+                                                                         transition[1],
+                                                                         event))
+            execute = None
+            do = True
+            execute = getattr(self, "exec_%s_from_%s" % (event.replace(" ", "_"),
+                                                         transition[0].replace(" ", "_")),
+                              None)
+            if execute is None:
+                execute = getattr(self, "exec_%s" % event.replace(" ", "_"),
+                                  None)
+            if execute is not None:
+                try:
+                    logging.debug("And execute the appropriate action %r" % execute)
+                    if execute(*args) is False:
+                        do = False
+                    errors = 0
+                except ZookeeperError, e:
+                    logging.exception("Got a zookeeper exception, reschedule the transition")
+                    self.events.put((priority, event, args))
+                    do = False
+                    errors += 1
+                    if errors > 10:
+                        logging.warn("Too many errors, wait a bit")
+                        time.sleep(2)
+                        errors = 7
+            if do:
+                self.state = transition[1]
 
 class ZkFarmExporter(ZkFarmWatcher):
+
+    # States:
+    #   - initial: not ready, initial setup should be done
+    #   - idle: initial setup has been done, ready to accept events
+    #   - suspended: connection to Zookeeper is suspended
+    #   - pending: connection to Zookeeper is suspended and some events
+    #              have been triggered
+    #   - lost: connection to database has been lost
+    EVENTS = { "initial setup":          [("initial",   "idle")],
+               "children modified":      [("idle",      "idle"),
+                                          ("lost",      "lost"),
+                                          ("suspended", "pending"),
+                                          ("pending",   "pending")],
+               "node modified":          [("idle",      "idle"),
+                                          ("lost",      "lost"),
+                                          ("suspended", "pending"),
+                                          ("pending",   "pending")],
+               "connection lost":        [("initial",   "lost"),
+                                          ("idle",      "lost"),
+                                          ("pending",   "lost"),
+                                          ("suspended", "lost")],
+               "connection suspended":   [("idle",      "suspended"),
+                                          ("suspended", "suspended")],
+               "connection recovered":   [("lost",      "initial"),
+                                          ("suspended", "idle"),
+                                          ("pending",   "idle"),
+                                          ("initial",   "initial")] }
+
     def __init__(self, zkconn, root_node_path, conf, updated_handler=None, filter_handler=None):
-        super(ZkFarmExporter, self).__init__()
-        self.watched_paths = {}
+        super(ZkFarmExporter, self).__init__(zkconn)
+        self.root_node_path = root_node_path
+        self.conf = conf
+        self.updated_handler = updated_handler
+        self.filter_handler = filter_handler
 
-        while True:
-            with self.cv:
-                try:
-                    node_names = zkconn.get_children(root_node_path, self.get_watcher(root_node_path))
-                except NoNodeException:
-                    zkconn.create_recursive(root_node_path, '', zc.zk.OPEN_ACL_UNSAFE)
-                    continue
-                except ConnectionLossException:
-                    self.wait()
-                    continue
-                new_conf = {}
-                for name in node_names:
-                    subnode_path = '%s/%s' % (root_node_path, name)
-                    info = unserialize(zkconn.get(subnode_path, self.get_watcher(subnode_path))[0])
-                    if not filter_handler or filter_handler(info):
-                        new_conf[name] = info
-                conf.write(new_conf)
-                if updated_handler:
-                    updated_handler()
-                self.wait()
+        self.event("initial setup")
+        self.loop()
 
-    def watcher(self, handle, type, state, path):
-        with self.cv:
-            if path in self.watched_paths:
-                del self.watched_paths[path]
-            self.notify()
+    def watch_children(self, _):
+        self.event("children modified")
+    def watch_node(self, what):
+        self.event("node modified", what)
 
-    def get_watcher(self, path):
-        if path not in self.watched_paths:
-            self.watched_paths[path] = True
-        return self.watcher
+    def get_watcher_node(self, path):
+        if path in self.monitored:
+            return None         # Already monitored
+        self.monitored.append(path)
+        return self.watch_node
 
+    def exec_connection_recovered_from_suspended(self):
+        pass
+    def exec_connection_recovered_from_pending(self):
+        self.event("children modified")
+    def exec_connection_recovered(self):
+        """The connection is reestablished"""
+        logging.info("Connnection with Zookeeper reestablished")
+        self.event("initial setup")
+
+    def exec_initial_setup(self):
+        """Watch for new children"""
+        self.monitored = []
+        self.root_monitored = False
+        try:
+            self.zkconn.ensure_path(self.root_node_path, acl=OPEN_ACL_UNSAFE)
+        except NodeExistsError:
+            pass
+        self.event("children modified")
+
+    def exec_children_modified(self):
+        self.root_monitored = False
+    def exec_children_modified_from_idle(self):
+        """A change has occurred on a child"""
+        new_conf = {}
+        nodes = self.zkconn.get_children(self.root_node_path,
+                                         watch=(self.root_monitored and None or self.watch_children))
+        for name in nodes:
+            subnode_path = '%s/%s' % (self.root_node_path, name)
+            info = unserialize(self.zkconn.get(subnode_path,
+                                               watch=self.get_watcher_node(subnode_path))[0])
+            if not self.filter_handler or self.filter_handler(info):
+                new_conf[name] = info
+        self.conf.write(new_conf)
+        if self.updated_handler:
+            self.updated_handler()
+
+    def exec_node_modified(self, what):
+        """A change has occurred inside the node"""
+        self.monitored.remove(what.path)
+        self.event("children modified")
 
 class ZkFarmJoiner(ZkFarmWatcher):
+
+    # States:
+    #   - initial: not ready, all initial setup should be done
+    #   - observer ready: not ready but observer is initialized
+    #   - idle: initial setup has been done, ready to accept events
+    #   - suspended: connection to Zookeeper is suspended
+    #   - pending: connection to Zookeeper is suspended and some events
+    #              have been triggered
+    #   - lost: connection to database has been lost
+    EVENTS = { "initial setup":          [("initial",   "observer ready")],
+               "initial znode setup":    [("observer ready", "idle")],
+               "znode modified":         [("idle",      "idle"),
+                                          ("lost",      "lost"),
+                                          ("suspended", "pending"),
+                                          ("pending",   "pending")],
+               "local modified":         [("idle",      "idle"),
+                                          ("lost",      "lost"),
+                                          ("suspended", "pending"),
+                                          ("pending",   "pending")],
+               "connection lost":        [("observer ready", "lost"),
+                                          ("idle",      "lost"),
+                                          ("pending",   "lost"),
+                                          ("suspended", "lost")],
+               "connection suspended":   [("idle",      "suspended"),
+                                          ("suspended", "suspended")],
+               "connection recovered":   [("lost",      "observer ready"),
+                                          ("suspended", "idle"),
+                                          ("pending",   "idle"),
+                                          ("observer ready", "observer ready")]}
+
     def __init__(self, zkconn, root_node_path, conf):
-        super(ZkFarmJoiner, self).__init__()
-        self.update_remote_timer = None
-        self.update_local_timer = None
-
-        self.zkconn = zkconn
+        super(ZkFarmJoiner, self).__init__(zkconn)
+        self.node_path = "%s/%s" % (root_node_path, self.grab_ip())
         self.conf = conf
-        self.node_path = '%s/%s' % (root_node_path, self.myip())
 
-        # force the hostname info key
-        info = conf.read()
+        self.event("initial setup")
+        self.loop()
+
+    def watch_node(self, what):
+        self.event("znode modified")
+
+    def exec_connection_recovered_from_suspended(self):
+        pass
+    def exec_connection_recovered_from_pending(self):
+        # We didn't want to have too many states, trigger both events
+        self.event("local modified")
+        self.event("znode modified")
+    def exec_connection_recovered(self):
+        """The connection is reestablished"""
+        logging.info("Connnection with Zookeeper reestablished")
+        self.event("initial znode setup")
+
+    def exec_initial_setup(self):
+        """Non-zookeeper related initial setup"""
+        # Force the hostname info key
+        info = self.conf.read()
         info['hostname'] = gethostname()
-        conf.write(info)
+        self.conf.write(info)
 
-        zkconn.create(self.node_path, serialize(conf.read()), zc.zk.OPEN_ACL_UNSAFE, EPHEMERAL)
-
+        # Setup observer
         observer = Observer()
-        observer.schedule(self, path=conf.file_path, recursive=True)
+        observer.schedule(self, path=self.conf.file_path, recursive=True)
         observer.start()
 
-        zkconn.get(self.node_path, self.node_watcher)
+        self.event("initial znode setup")
 
-        while True:
-            with self.cv:
-                self.wait()
+    def exec_initial_znode_setup(self):
+        """Initial setup of znode"""
+        try:
+            self.zkconn.create(self.node_path, serialize(self.conf.read()),
+                               acl=OPEN_ACL_UNSAFE, ephemeral=True)
+        except NodeExistsError:
+            # Race condition, may happen
+            pass
+        # Setup the watcher
+        self.zkconn.get(self.node_path, self.watch_node)
+        self.monitored = True
 
-    def dispatch(self, event):
-        with self.cv:
-            try:
-                current_conf = unserialize(self.zkconn.get(self.node_path)[0])
-                new_conf = self.conf.read()
-                if current_conf != new_conf:
-                    logging.info('Local conf changed')
-                    self.zkconn.set(self.node_path, serialize(new_conf))
-            except ConnectionLossException:
-                pass
-            self.notify()
+    def exec_local_modified(self):
+        pass
+    def exec_local_modified_from_idle(self):
+        """Check a local modification"""
+        current_conf = unserialize(self.zkconn.get(self.node_path)[0])
+        new_conf = self.conf.read()
+        if current_conf != new_conf:
+            logging.info('Local conf changed')
+            self.zkconn.set(self.node_path, serialize(new_conf))
 
-    def node_watcher(self, handle, type, state, path):
-        with self.cv:
-            current_conf = self.conf.read()
-            new_conf = unserialize(self.zkconn.get(self.node_path, self.node_watcher)[0])
+    def exec_znode_modified(self):
+        self.monitored = False
+    def exec_znode_modified_from_idle(self):
+        """Check remote modification"""
+        current_conf = self.conf.read()
+        try:
+            new_conf = unserialize(self.zkconn.get(self.node_path,
+                                                   watch=(self.monitored and None or self.watch_node))[0])
             if current_conf != new_conf:
                 logging.info('Remote conf changed')
                 self.conf.write(new_conf)
-            self.notify()
+        except NoNodeError:
+            logging.warn("not able to watch for node %s: not exist anymore" % self.node_path)
 
-    def myip(self):
+    def dispatch(self, event):
+        """A local change has occured"""
+        self.event("local modified")
+
+    def grab_ip(self):
         # Try to find default IP
         ip = None
         s = socket(AF_INET, SOCK_DGRAM)
