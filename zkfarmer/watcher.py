@@ -5,16 +5,17 @@
 # For the full copyright and license information, please view the LICENSE
 # file that was distributed with this source code.
 
-import logging
 import threading
 import Queue
 import time
 import itertools
-from socket import socket, gethostname, AF_INET, SOCK_DGRAM
+
+import logging as _logging
+logger = _logging.getLogger(__name__)
 
 from watchdog.observers import Observer
 
-from .utils import serialize, unserialize
+from .utils import serialize, unserialize, ip
 from kazoo.exceptions import NoNodeError, NodeExistsError, ZookeeperError
 from kazoo.client import KazooState, OPEN_ACL_UNSAFE
 
@@ -36,13 +37,13 @@ class ZkFarmWatcher(object):
 
     def _zkchange(self, state):
         if state == KazooState.CONNECTED:
-            logging.info("Now connected to Zookeeper")
+            logger.info("Now connected to Zookeeper")
             self.urgent_event("connection recovered")
         elif state == KazooState.LOST:
-            logging.warn("Connection to Zookeeper lost")
+            logger.warn("Connection to Zookeeper lost")
             self.urgent_event("connection lost")
         elif state == KazooState.SUSPENDED:
-            logging.warn("Connection to Zookeeper suspended")
+            logger.warn("Connection to Zookeeper suspended")
             self.urgent_event("connection suspended")
 
     def event(self, name, *args):
@@ -64,12 +65,12 @@ class ZkFarmWatcher(object):
 
             transition = [t for t in self.EVENTS[event] if t[0] == self.state]
             if not transition:
-                logging.warn("unknown transition for event %r from state %s" % (event,
-                                                                                self.state))
+                logger.warn("unknown transition for event %r from state %s" % (event,
+                                                                               self.state))
                 continue
             transition = transition[0]
-            logging.debug("Transition from %r to %r next to event %r" % (transition[0],
-                                                                         transition[1],
+            logger.debug("Transition from %r to %r next to event %r" % (transition[0],
+                                                                        transition[1],
                                                                          event))
             execute = None
             do = True
@@ -81,17 +82,17 @@ class ZkFarmWatcher(object):
                                   None)
             if execute is not None:
                 try:
-                    logging.debug("And execute the appropriate action %r" % execute)
+                    logger.debug("And execute the appropriate action %r" % execute)
                     if execute(*args) is False:
                         do = False
                     errors = 0
                 except ZookeeperError, e:
-                    logging.exception("Got a zookeeper exception, reschedule the transition")
+                    logger.exception("Got a zookeeper exception, reschedule the transition")
                     self.events.put((priority, event, args))
                     do = False
                     errors += 1
                     if errors > 10:
-                        logging.warn("Too many errors, wait a bit")
+                        logger.warn("Too many errors, wait a bit")
                         time.sleep(2)
                         errors = 7
             if do:
@@ -153,7 +154,7 @@ class ZkFarmExporter(ZkFarmWatcher):
         self.event("children modified")
     def exec_connection_recovered(self):
         """The connection is reestablished"""
-        logging.info("Connnection with Zookeeper reestablished")
+        logger.info("Connnection with Zookeeper reestablished")
         self.event("initial setup")
 
     def exec_initial_setup(self):
@@ -221,7 +222,7 @@ class ZkFarmJoiner(ZkFarmWatcher):
 
     def __init__(self, zkconn, root_node_path, conf):
         super(ZkFarmJoiner, self).__init__(zkconn)
-        self.node_path = "%s/%s" % (root_node_path, self.grab_ip())
+        self.node_path = "%s/%s" % (root_node_path, ip())
         self.conf = conf
 
         self.event("initial setup")
@@ -238,14 +239,14 @@ class ZkFarmJoiner(ZkFarmWatcher):
         self.event("znode modified")
     def exec_connection_recovered(self):
         """The connection is reestablished"""
-        logging.info("Connnection with Zookeeper reestablished")
+        logger.info("Connnection with Zookeeper reestablished")
         self.event("initial znode setup")
 
     def exec_initial_setup(self):
         """Non-zookeeper related initial setup"""
         # Force the hostname info key
         info = self.conf.read()
-        info['hostname'] = gethostname()
+        info['hostname'] = ip()
         self.conf.write(info)
 
         # Setup observer
@@ -274,7 +275,7 @@ class ZkFarmJoiner(ZkFarmWatcher):
         current_conf = unserialize(self.zkconn.get(self.node_path)[0])
         new_conf = self.conf.read()
         if current_conf != new_conf:
-            logging.info('Local conf changed')
+            logger.info('Local conf changed')
             self.zkconn.set(self.node_path, serialize(new_conf))
 
     def exec_znode_modified(self):
@@ -286,25 +287,11 @@ class ZkFarmJoiner(ZkFarmWatcher):
             new_conf = unserialize(self.zkconn.get(self.node_path,
                                                    watch=(self.monitored and None or self.watch_node))[0])
             if current_conf != new_conf:
-                logging.info('Remote conf changed')
+                logger.info('Remote conf changed')
                 self.conf.write(new_conf)
         except NoNodeError:
-            logging.warn("not able to watch for node %s: not exist anymore" % self.node_path)
+            logger.warn("not able to watch for node %s: not exist anymore" % self.node_path)
 
     def dispatch(self, event):
         """A local change has occured"""
         self.event("local modified")
-
-    def grab_ip(self):
-        # Try to find default IP
-        ip = None
-        s = socket(AF_INET, SOCK_DGRAM)
-        try:
-            s.connect(('239.255.0.0', 9))
-            ip = s.getsockname()[0]
-        except socket.error:
-            logging.error("Cannot determine host IP")
-            exit(1)
-        finally:
-            del s
-        return ip
