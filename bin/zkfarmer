@@ -86,6 +86,12 @@ def main():
     subparser.add_argument('field', help='the path of the field to set')
     subparser.add_argument('value', help='the new value')
 
+    # The 'unset' sub-command
+    subparser = subparsers.add_parser('unset', help='unset a field of a given node or farm',
+                                      description='Unset a field of a given node or farm.')
+    subparser.add_argument('zknode', help='the ZooKeeper node path to the farm or node')
+    subparser.add_argument('field', help='the path of the field to unset')
+
     # The `check' sub-command
     subparser = subparsers.add_parser('check', help='check the health of a given farm',
                                       description='Check a farm health regarding the number of failed node and return nagios compatible output. ' +
@@ -208,6 +214,9 @@ def main():
 
     elif args.command == 'set':
         farmer.set(args.zknode, args.field, args.value)
+
+    elif args.command == 'unset':
+        farmer.unset(args.zknode, args.field)
 
     elif args.command == 'check':
         (status, reason) = farmer.check(args.zknode, args.max_failed_node, args.warn_failed_node)
