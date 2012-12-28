@@ -191,6 +191,8 @@ def main():
                     for key, val in dict_filter(info, fields).items():
                         if val == dict:
                             continue
+                        if val is None:
+                          val = "None" 
                         fields_data.append('='.join([key, val]))
                     print '%-20s %s' % (name[0:20], ', '.join(fields_data))
                     continue
