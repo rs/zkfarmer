@@ -77,6 +77,27 @@ class TestZkFarmer(KazooTestCase):
         self.assertEqual(json.loads(self.client.get("/something")[0]),
                          dict(enabled="1", maintainance="0", weight="10"))
 
+    def test_unset(self):
+        """Unset some value."""
+        z = ZkFarmer(self.client)
+        self.client.ensure_path("/something")
+        self.client.set("/something",
+                        json.dumps(dict(enabled="1", maintainance="0", weight="10")))
+        z.unset("/something", "enabled")
+        self.assertEqual(json.loads(self.client.get("/something")[0]),
+                         dict(maintainance="0", weight="10"))
+
+    def test_unset_none(self):
+        """Unset an unexistent value."""
+        z = ZkFarmer(self.client)
+        self.client.ensure_path("/something")
+        self.client.set("/something",
+                        json.dumps(dict(enabled="1", maintainance="0", weight="10")))
+        z.unset("/something", "nothing")
+        self.assertEqual(json.loads(self.client.get("/something")[0]),
+                         dict(enabled="1", maintainance="0", weight="10"))
+
+
     def test_set_bad_version(self):
         """Set some value with a concurrent update."""
         z = ZkFarmer(self.client)

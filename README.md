@@ -171,9 +171,15 @@ You can also change the value of field for a given host from anywhere on your ne
 
 The local configuration on the host will immediately get updated as well as all consumers currently exporting this farm.
 
+### Unset a field
+
+You can remove a field from a given host like this:
+    
+    $ zkfarmer unset /services/db/1.2.3.4 enabled
+
 ### Farm properties
 
-The `zkfarmer set` and `zkfarmer get` commands can be used to store and read properties of a farm. This can be useful for monitoring tools for instance. You could store the minimum number of working nodes required before to throw an alert. To do that, you need two properties, `min_nodes` and `running_filter` for instance:
+The `zkfarmer set/unset` and `zkfarmer get` commands can be used to store and read properties of a farm. This can be useful for monitoring tools for instance. You could store the minimum number of working nodes required before to throw an alert. To do that, you need two properties, `min_nodes` and `running_filter` for instance:
 
     $ zkfarmer set /services/db min_node 30
     $ zkfarmer set /services/db running_filter enabled=1
@@ -185,7 +191,7 @@ Then to check the health of a service, run the following nagios compatible scrip
     farm=$1
     min_node=$(zkfarmer get $farm min_node)
     running_filter=$(zkfarmer get $farm running_filter)
-    if [ $(kfarmer ls --filters $working_filters $farm | wc -l) -gt $min_node ]
+    if [ $(zkfarmer ls --filters $working_filters $farm | wc -l) -gt $min_node ]
     then
         echo "OK"
     else
@@ -208,6 +214,19 @@ Usage for the `zkfarmer set` command:
       zknode      the ZooKeeper node path to the farm or node
       field       the path of the field to set
       value       the new value
+
+    optional arguments:
+      -h, --help  show this help message and exit
+
+Usage for the `zkfarmer unset` command:
+
+    usage: zkfarmer unset [-h] zknode field
+
+    Unset a field of a given node or farm.
+
+    positional arguments:
+      zknode      the ZooKeeper node path to the farm or node
+      field       the path of the field to unset
 
     optional arguments:
       -h, --help  show this help message and exit

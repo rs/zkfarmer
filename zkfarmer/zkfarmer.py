@@ -46,12 +46,9 @@ class ZkFarmer(object):
             return {'size': 0}
         return dict_filter(unserialize(data), field_or_fields)
 
-    def set(self, zknode, field, value):
+    def _save_safe(self, zknode, info, data):
         retry = 3
         while retry:
-            data = self.zkconn.get(zknode)
-            info = unserialize(data[0])
-            dict_set_path(info, field, value)
             try:
                 self.zkconn.retry(self.zkconn.set, zknode, serialize(info), data[1].version)
                 break
@@ -59,6 +56,19 @@ class ZkFarmer(object):
                 # remove value changed since I get it, retry with fresh value
                 retry = retry - 1
                 pass
+
+    def set(self, zknode, field, value):
+        data = self.zkconn.get(zknode)
+        info = unserialize(data[0])
+        dict_set_path(info, field, value)
+        self._save_safe(zknode, info, data)
+
+    def unset(self, zknode, field):
+        data = self.zkconn.get(zknode)        
+        info = unserialize(data[0])
+        if field in info:
+            del info[field]
+        self._save_safe(zknode, info, data)
 
     def check(self, zknode, max_failed_node, warn_failed_node=None):
         props = self.get(zknode)
