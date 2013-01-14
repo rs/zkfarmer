@@ -11,6 +11,7 @@ from mock import Mock, patch
 class TestZkJoiner(KazooTestCase):
 
     NAME = "zk-test"
+    IP = "1.1.1.1"
     TIMEOUT = 0.1
 
     def setUp(self):
@@ -25,6 +26,11 @@ class TestZkJoiner(KazooTestCase):
 
         # Fake IP
         patcher = patch("zkfarmer.watcher.ip")
+        patcher.start().return_value = self.IP
+        self.addCleanup(patcher.stop)
+
+        # Fake name
+        patcher = patch("zkfarmer.watcher.gethostname")
         patcher.start().return_value = self.NAME
         self.addCleanup(patcher.stop)
 
@@ -50,7 +56,7 @@ class TestZkJoiner(KazooTestCase):
                                        "hostname": self.NAME}
         z = ZkFarmJoiner(self.client, "/services/db", self.conf)
         z.loop(3, timeout=self.TIMEOUT)
-        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.NAME)[0]),
+        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
                          {"enabled": "1",
                           "hostname": self.NAME})
 
@@ -60,13 +66,13 @@ class TestZkJoiner(KazooTestCase):
                                        "hostname": self.NAME}
         z = ZkFarmJoiner(self.client, "/services/db", self.conf)
         z.loop(2, timeout=self.TIMEOUT)
-        self.assertEqual(self.client.get("/services/db/%s" % self.NAME)[1].ephemeralOwner,
+        self.assertEqual(self.client.get("/services/db/%s" % self.IP)[1].ephemeralOwner,
                          self.client.client_id[0])
 
     def test_initial_znode_already_exists(self):
         """Check if we created znode even if it exists"""
-        self.client.ensure_path("/services/db/%s" % self.NAME)
-        self.client.set("/services/db/%s" % self.NAME,
+        self.client.ensure_path("/services/db/%s" % self.IP)
+        self.client.set("/services/db/%s" % self.IP,
                         json.dumps({"enabled": "1"}))
         self.test_initial_set()
 
@@ -82,7 +88,7 @@ class TestZkJoiner(KazooTestCase):
         z.dispatch("bogus modification")
         z.loop(4, timeout=self.TIMEOUT)
         self.assertFalse(self.conf.write.called)
-        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.NAME)[0]),
+        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
                          {"enabled": "0",
                           "hostname": self.NAME})
 
@@ -93,7 +99,7 @@ class TestZkJoiner(KazooTestCase):
         z = ZkFarmJoiner(self.client, "/services/db", self.conf)
         z.loop(3, timeout=self.TIMEOUT)
         self.conf.reset_mock()
-        self.client.set("/services/db/%s" % self.NAME,
+        self.client.set("/services/db/%s" % self.IP,
                         json.dumps({"enabled": "0",
                                     "hostname": self.NAME}))
         z.loop(2, timeout=self.TIMEOUT)
@@ -109,7 +115,7 @@ class TestZkJoiner(KazooTestCase):
         self.conf.reset_mock()
         self.conf.read.return_value = {"enabled": "0",
                                        "hostname": self.NAME}
-        self.client.set("/services/db/%s" % self.NAME,
+        self.client.set("/services/db/%s" % self.IP,
                         json.dumps({"enabled": "0",
                                     "hostname": self.NAME}))
         z.loop(2, timeout=self.TIMEOUT)
@@ -123,7 +129,7 @@ class TestZkJoiner(KazooTestCase):
         z.loop(3, timeout=self.TIMEOUT)
         self.expire_session()
         z.loop(5, timeout=self.TIMEOUT)
-        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.NAME)[0]),
+        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
                          {"enabled": "1",
                           "hostname": self.NAME})
         return z
@@ -137,7 +143,7 @@ class TestZkJoiner(KazooTestCase):
         z.dispatch("local modification")
         z.loop(4, timeout=self.TIMEOUT)
         self.assertFalse(self.conf.write.called)
-        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.NAME)[0]),
+        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
                          {"enabled": "0",
                           "hostname": self.NAME})
 
@@ -145,7 +151,7 @@ class TestZkJoiner(KazooTestCase):
         """Test we handle disconnect and remote modification after reconnect"""
         z = self.test_disconnect()
         self.conf.reset_mock()
-        self.client.set("/services/db/%s" % self.NAME,
+        self.client.set("/services/db/%s" % self.IP,
                         json.dumps({"enabled": "22",
                                     "hostname": self.NAME}))
         z.loop(2, timeout=self.TIMEOUT)
@@ -163,7 +169,7 @@ class TestZkJoiner(KazooTestCase):
                                        "hostname": self.NAME}
         z.dispatch("local modification")
         z.loop(10, timeout=self.TIMEOUT)
-        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.NAME)[0]),
+        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
                          {"enabled": "22",
                           "hostname": self.NAME})
 
@@ -174,13 +180,13 @@ class TestZkJoiner(KazooTestCase):
         z = ZkFarmJoiner(self.client, "/services/db", self.conf)
         z.loop(3, timeout=self.TIMEOUT)
         self.expire_session()
-        self.client.ensure_path("/services/db/%s" % self.NAME) # Disconnected, the path does not exist
-        self.client.set("/services/db/%s" % self.NAME,
+        self.client.ensure_path("/services/db/%s" % self.IP) # Disconnected, the path does not exist
+        self.client.set("/services/db/%s" % self.IP,
                         json.dumps({"enabled": "22",
                                     "hostname": self.NAME}))
         z.loop(10, timeout=self.TIMEOUT)
         try:
-            self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.NAME)[0]),
+            self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
                              {"enabled": "22",
                               "hostname": self.NAME})
         except AssertionError:
@@ -202,11 +208,11 @@ class TestZkJoiner(KazooTestCase):
         z.dispatch("local modification")
         self.conf.read.return_value = {"enabled": "56",
                                        "hostname": self.NAME}
-        self.client.ensure_path("/services/db/%s" % self.NAME) # Disconnected, the path does not exist
-        self.client.set("/services/db/%s" % self.NAME,
+        self.client.ensure_path("/services/db/%s" % self.IP) # Disconnected, the path does not exist
+        self.client.set("/services/db/%s" % self.IP,
                         json.dumps({"enabled": "22",
                                     "hostname": self.NAME}))
         z.loop(10, timeout=self.TIMEOUT)
-        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.NAME)[0]),
+        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
                          {"enabled": "56",
                           "hostname": self.NAME})
