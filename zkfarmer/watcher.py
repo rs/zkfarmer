@@ -249,7 +249,7 @@ class ZkFarmJoiner(ZkFarmWatcher):
         """Non-zookeeper related initial setup"""
         # Force the hostname info key
         info = self.conf.read()
-        info['hostname'] = ip()
+        info['hostname'] = gethostname()
         self.conf.write(info)
 
         # Setup observer
