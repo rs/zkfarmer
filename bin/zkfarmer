@@ -230,6 +230,7 @@ def main():
             label = 'UNKNOWN'
 
         print '%s: %s' % (label, reason)
+        zkconn.close()
         exit(status)
 
     elif args.command == 'exec':
@@ -237,6 +238,8 @@ def main():
 
     else:
         parser.error('Unsupported command: %s' % args.command)
+
+    zkconn.close()
 
 
 if __name__ == "__main__":
