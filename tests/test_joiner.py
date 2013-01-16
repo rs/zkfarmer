@@ -216,3 +216,31 @@ class TestZkJoiner(KazooTestCase):
         self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
                          {"enabled": "56",
                           "hostname": self.NAME})
+
+    def test_remote_modification_should_not_cancel_local_one(self):
+        """Test if a received remote modification does not cancel a local one.
+
+        This may happen if we have a local modification while
+        processing the echo of a previous modification. For example,
+        we set a value to 1021, we receive back a remote change about
+        this value being set to 1021 but we have a local modification
+        at the same time putting the value to 1022.
+        """
+        self.conf.read.return_value = {"enabled": "1",
+                                       "hostname": self.NAME,
+                                       "counter": 1000}
+        z = ZkFarmJoiner(self.client, "/services/db", self.conf)
+        z.loop(3, timeout=self.TIMEOUT)
+        self.conf.reset_mock()
+        self.conf.read.return_value = {"enabled": "1",
+                                       "hostname": self.NAME,
+                                       "counter": 1001}
+        z.dispatch("local modification")
+        z.loop(1, timeout=self.TIMEOUT)
+        # Here comes the local modification that won't be noticed now
+        self.conf.reset_mock()
+        self.conf.read.return_value = {"enabled": "1",
+                                       "hostname": self.NAME,
+                                       "counter": 1002}
+        z.loop(3, timeout=self.TIMEOUT)
+        self.assertFalse(self.conf.write.called)
