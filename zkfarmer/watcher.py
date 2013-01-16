@@ -251,6 +251,7 @@ class ZkFarmJoiner(ZkFarmWatcher):
         info = self.conf.read()
         info['hostname'] = gethostname()
         self.conf.write(info)
+        self.mzxid = None
 
         # Setup observer
         observer = Observer()
@@ -280,7 +281,10 @@ class ZkFarmJoiner(ZkFarmWatcher):
         new_conf = self.conf.read()
         if current_conf != new_conf:
             logger.info('Local conf changed')
-            self.zkconn.set(self.node_path, serialize(new_conf))
+            logger.debug('Previous conf:   %r' % current_conf)
+            logger.debug('New conf:        %r' % new_conf)
+            s = self.zkconn.set(self.node_path, serialize(new_conf))
+            self.mzxid = s.mzxid # Record latest mzxid
 
     def exec_znode_modified(self):
         self.monitored = False
@@ -288,10 +292,17 @@ class ZkFarmJoiner(ZkFarmWatcher):
         """Check remote modification"""
         current_conf = self.conf.read()
         try:
-            new_conf = unserialize(self.zkconn.get(self.node_path,
-                                                   watch=(self.monitored and None or self.watch_node))[0])
+            new = self.zkconn.get(self.node_path,
+                                  watch=(self.monitored and None or self.watch_node))
+            if new[1].mzxid <= self.mzxid:
+                logger.debug('Discard remote modification older than '
+                             'latest local modification (%r <= %r)' % (new[1].mzxid, self.mzxid))
+                return
+            new_conf = unserialize(new[0])
             if current_conf != new_conf:
                 logger.info('Remote conf changed')
+                logger.debug('Previous conf: %r' % current_conf)
+                logger.debug('New conf:      %r' % new_conf)
                 self.conf.write(new_conf)
         except NoNodeError:
             logger.warn("not able to watch for node %s: not exist anymore" % self.node_path)
