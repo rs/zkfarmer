@@ -33,8 +33,8 @@ def main():
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-q', '--quiet', dest='quiet', action='store_true',
                        help='lower the log level so only warnings and errors are logged')
-    group.add_argument('-v', '--verbose', dest='verbose', action='store_true',
-                       help='raise the log level to DEBUG')
+    group.add_argument('-v', '--verbose', dest='verbose', action='count',
+                       help='raise the log level')
 
     subparsers = parser.add_subparsers(title='subcommands', dest='command')
     subparsers.add_parser('join')
@@ -134,12 +134,15 @@ def main():
 
     args = parser.parse_args()
 
-    if args.verbose:
-        level = logging.DEBUG
-    elif args.quiet:
-        level = logging.WARN
-    else:
-        level = logging.WARN
+    # Syslog level. Default to WARN unless we use 'join' or
+    # 'export'. In this case, default to INFO.
+    level = args.verbose or 0
+    if args.command in ['join', 'export']:
+        level += 1
+    if args.quiet:
+        level = 0
+    level = {0: logging.WARN,
+             1: logging.INFO}.get(level, logging.DEBUG)
 
     # Setup a nice logging output
     logger = logging.getLogger()
