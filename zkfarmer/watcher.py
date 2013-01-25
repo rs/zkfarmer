@@ -32,7 +32,7 @@ class ZkFarmWatcher(object):
     EVENTS = {}
 
     def __init__(self, zkconn):
-        self.events = Queue.Queue()
+        self.events = Queue.PriorityQueue()
         self.counter = itertools.count()
         self.zkconn = zkconn
         self.zkconn.add_listener(self._zkchange)
