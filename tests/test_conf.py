@@ -89,6 +89,15 @@ class TestConfJSON(TempDirectoryTestCase):
                 self.assertEqual(json.load(f),
                                  {"1": "2"})
 
+    def test_json_no_overwrite_on_failure(self):
+        """Check we don't overwrite an existing file in case of failure."""
+        name = "%s/test.json" % self.tmpdir
+        a = conf.Conf(name)
+        a.write({"1": "2"})
+        # Write something invalid
+        self.assertRaises(TypeError, a.write, json)
+        self.assertEqual(a.read(), {"1": "2"})
+
 class TestConfYAML(TempDirectoryTestCase):
 
     def test_yaml_write_from_extension(self):
@@ -175,6 +184,15 @@ class TestConfPHP(TempDirectoryTestCase):
         name = "%s/test.php" % self.tmpdir
         with self.assertRaises(NotImplementedError):
             conf.Conf(name).read()
+
+    def test_php_no_overwrite_on_failure(self):
+        """Check we don't overwrite an existing file in case of failure."""
+        name = "%s/test.json" % self.tmpdir
+        a = conf.Conf(name)
+        a.write({"1": "2"})
+        # Write something invalid
+        self.assertRaises(TypeError, a.write, json)
+        self.assertEqual(a.read(), {"1": "2"})
 
 class TestConfDir(TempDirectoryTestCase):
 
