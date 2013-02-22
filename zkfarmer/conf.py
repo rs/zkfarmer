@@ -73,12 +73,15 @@ class ConfFile(ConfBase):
             return
         tmp, tmpname = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(self.file_path)))
         try:
+            current_umask = os.umask(0)
+            os.umask(current_umask)
+            os.chmod(tmpname, 0666 & ~current_umask)
             f = os.fdopen(tmp, "w")
             yield f
             f.close()
             os.rename(tmpname, self.file_path)
         except:
-            os.unlink(tmp)
+            os.unlink(tmpname)
             raise
 
 class ConfJSON(ConfFile):

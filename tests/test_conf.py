@@ -5,6 +5,7 @@ import json
 import yaml
 import os
 import sys
+import stat
 
 from mock import patch
 from zkfarmer import conf
@@ -97,6 +98,26 @@ class TestConfJSON(TempDirectoryTestCase):
         # Write something invalid
         self.assertRaises(TypeError, a.write, json)
         self.assertEqual(a.read(), {"1": "2"})
+
+    def test_json_appropriate_rights(self):
+        """Check if a file is created with the appropriate rights"""
+        os.umask(022)
+        name = "%s/test.json" % self.tmpdir
+        a = conf.Conf(name)
+        a.write({"1": "2"})
+        del a
+        a = os.stat(name)
+        self.assertEqual(a.st_mode & 0777, 0644)
+
+    def test_json_appropriate_rights_umask(self):
+        """Check if a file is created with appropriate rights using non standard umask."""
+        os.umask(027)
+        name = "%s/test.json" % self.tmpdir
+        a = conf.Conf(name)
+        a.write({"1": "2"})
+        del a
+        a = os.stat(name)
+        self.assertEqual(a.st_mode & 0777, 0640)
 
 class TestConfYAML(TempDirectoryTestCase):
 
