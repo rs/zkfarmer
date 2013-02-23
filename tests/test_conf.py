@@ -5,6 +5,7 @@ import json
 import yaml
 import os
 import sys
+import stat
 
 from mock import patch
 from zkfarmer import conf
@@ -88,6 +89,35 @@ class TestConfJSON(TempDirectoryTestCase):
             with open("%s/out" % self.tmpdir) as f:
                 self.assertEqual(json.load(f),
                                  {"1": "2"})
+
+    def test_json_no_overwrite_on_failure(self):
+        """Check we don't overwrite an existing file in case of failure."""
+        name = "%s/test.json" % self.tmpdir
+        a = conf.Conf(name)
+        a.write({"1": "2"})
+        # Write something invalid
+        self.assertRaises(TypeError, a.write, json)
+        self.assertEqual(a.read(), {"1": "2"})
+
+    def test_json_appropriate_rights(self):
+        """Check if a file is created with the appropriate rights"""
+        os.umask(022)
+        name = "%s/test.json" % self.tmpdir
+        a = conf.Conf(name)
+        a.write({"1": "2"})
+        del a
+        a = os.stat(name)
+        self.assertEqual(a.st_mode & 0777, 0644)
+
+    def test_json_appropriate_rights_umask(self):
+        """Check if a file is created with appropriate rights using non standard umask."""
+        os.umask(027)
+        name = "%s/test.json" % self.tmpdir
+        a = conf.Conf(name)
+        a.write({"1": "2"})
+        del a
+        a = os.stat(name)
+        self.assertEqual(a.st_mode & 0777, 0640)
 
 class TestConfYAML(TempDirectoryTestCase):
 
@@ -175,6 +205,15 @@ class TestConfPHP(TempDirectoryTestCase):
         name = "%s/test.php" % self.tmpdir
         with self.assertRaises(NotImplementedError):
             conf.Conf(name).read()
+
+    def test_php_no_overwrite_on_failure(self):
+        """Check we don't overwrite an existing file in case of failure."""
+        name = "%s/test.json" % self.tmpdir
+        a = conf.Conf(name)
+        a.write({"1": "2"})
+        # Write something invalid
+        self.assertRaises(TypeError, a.write, json)
+        self.assertEqual(a.read(), {"1": "2"})
 
 class TestConfDir(TempDirectoryTestCase):
 

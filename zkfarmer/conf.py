@@ -11,6 +11,8 @@ import sys
 import shutil
 import json
 import yaml
+import contextlib
+import tempfile
 
 # Prevent unstandard !!python/unicode prefixes
 yaml.add_representer(unicode, lambda dumper, value: dumper.represent_scalar(u'tag:yaml.org,2002:str', value))
@@ -55,15 +57,32 @@ class ConfFile(ConfBase):
     def __init__(self, file_path):
         self.file_path = file_path
 
+    @contextlib.contextmanager
     def open(self, write=False):
         if self.file_path == '-':
             if write:
-                return sys.stdout
+                try:
+                    yield sys.stdout
+                finally:
+                    sys.stdout.flush()
+                return
             else:
                 raise NotImplementedError('Cannot read configuration from stdin')
-        mode = 'w' if write else 'r'
-        return open(self.file_path, mode)
-
+        if not write:
+            yield open(self.file_path, 'r')
+            return
+        tmp, tmpname = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(self.file_path)))
+        try:
+            current_umask = os.umask(0)
+            os.umask(current_umask)
+            os.chmod(tmpname, 0666 & ~current_umask)
+            f = os.fdopen(tmp, "w")
+            yield f
+            f.close()
+            os.rename(tmpname, self.file_path)
+        except:
+            os.unlink(tmpname)
+            raise
 
 class ConfJSON(ConfFile):
     def read(self):
