@@ -152,10 +152,6 @@ class ZkFarmExporter(ZkFarmWatcher):
         self.monitored.append(path)
         return self.watch_node
 
-    def exec_connection_recovered_from_suspended(self):
-        pass
-    def exec_connection_recovered_from_pending(self):
-        self.event("children modified")
     def exec_connection_recovered(self):
         """The connection is reestablished"""
         logger.info("Connnection with Zookeeper reestablished")
@@ -234,12 +230,6 @@ class ZkFarmJoiner(ZkFarmWatcher):
     def watch_node(self, what):
         self.event("znode modified")
 
-    def exec_connection_recovered_from_suspended(self):
-        pass
-    def exec_connection_recovered_from_pending(self):
-        # We didn't want to have too many states, trigger both events
-        self.event("local modified")
-        self.event("znode modified")
     def exec_connection_recovered(self):
         """The connection is reestablished"""
         logger.info("Connnection with Zookeeper reestablished")
