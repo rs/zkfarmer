@@ -128,7 +128,7 @@ class TestZkJoiner(KazooTestCase):
         z = ZkFarmJoiner(self.client, "/services/db", self.conf)
         z.loop(3, timeout=self.TIMEOUT)
         self.expire_session()
-        z.loop(5, timeout=self.TIMEOUT)
+        z.loop(8, timeout=self.TIMEOUT)
         self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
                          {"enabled": "1",
                           "hostname": self.NAME})
