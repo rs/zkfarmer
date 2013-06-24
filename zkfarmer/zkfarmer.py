@@ -28,10 +28,12 @@ class ZkFarmer(object):
         if current_size > self.get(zknode, 'size'):
             self.set(zknode, 'size', current_size)
         # Join the farm
-        ZkFarmJoiner(self.zkconn, zknode, conf).loop()
+        ZkFarmJoiner(self.zkconn, zknode, conf).loop(ignore_unknown_transitions=True)
 
     def export(self, zknode, conf, updated_handler=None, filters=None):
-        ZkFarmExporter(self.zkconn, zknode, conf, updated_handler, filter_handler=create_filter(filters)).loop()
+        ZkFarmExporter(self.zkconn, zknode, conf,
+                       updated_handler,
+                       filter_handler=create_filter(filters)).loop(ignore_unknown_transitions=True)
 
     def list(self, zknode):
         try:
