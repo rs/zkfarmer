@@ -46,6 +46,8 @@ def main():
     subparser.add_argument('conf', help='Path to the node configuration')
     subparser.add_argument('-f', '--format', dest='format', choices=['json', 'yaml', 'php', 'dir'],
                            help='set the configuration format')
+    subparser.add_argument('-c', '--common', dest='common', action='store_true',
+                           help='use a common zookeeper node instead of a dedicate node')
 
     # The `export' sub-command
     subparser = subparsers.add_parser('export', help='exports and maintain farm\'s nodes configuration',
@@ -184,7 +186,7 @@ def main():
         farmer.export(args.zknode, conf, updated_handler, args.filters)
 
     elif args.command == 'join':
-        farmer.join(args.zknode, conf)
+        farmer.join(args.zknode, conf, args.common)
 
     elif args.command == 'ls':
         fields = args.fields.split(',') if args.fields else []

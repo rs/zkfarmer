@@ -20,15 +20,16 @@ class ZkFarmer(object):
     def __init__(self, zkconn):
         self.zkconn = zkconn
 
-    def join(self, zknode, conf):
+    def join(self, zknode, conf, common=False):
         # Create farms ZkNode if doesn't already exists
         self.zkconn.retry(self.zkconn.ensure_path, zknode, acl=OPEN_ACL_UNSAFE)
         # If we are going to enlarged the farm max seen size, store it
-        current_size = len(self.list(zknode)) + 1
-        if current_size > self.get(zknode, 'size'):
-            self.set(zknode, 'size', current_size)
+        if not common:
+            current_size = len([x for x in self.list(zknode) if str(x) != "common"]) + 1
+            if current_size > self.get(zknode, 'size'):
+                self.set(zknode, 'size', current_size)
         # Join the farm
-        ZkFarmJoiner(self.zkconn, zknode, conf).loop(ignore_unknown_transitions=True)
+        ZkFarmJoiner(self.zkconn, zknode, conf, common).loop(ignore_unknown_transitions=True)
 
     def export(self, zknode, conf, updated_handler=None, filters=None):
         ZkFarmExporter(self.zkconn, zknode, conf,
@@ -99,7 +100,7 @@ class ZkFarmer(object):
                 if filter_handler(info):
                     running += 1
         else:
-            running = len(self.list(zknode))
+            running = len([x for x in self.list(zknode) if str(x) != "common"])
 
         failed = size - running
         if failed >= max_failed:
