@@ -233,7 +233,10 @@ class ZkFarmJoiner(ZkFarmWatcher):
 
         # Setup observer
         observer = Observer()
-        observer.schedule(self, path=self.conf.file_path, recursive=True)
+        path = self.conf.file_path
+        if not os.path.isdir(path):
+            path = os.path.dirname(os.path.realpath(path))
+        observer.schedule(self, path=path, recursive=True)
         observer.start()
 
         self.event("initial znode setup")
@@ -290,4 +293,5 @@ class ZkFarmJoiner(ZkFarmWatcher):
 
     def dispatch(self, event):
         """A local change has occured"""
-        self.event("local modified")
+        if event.src_path.startswith(self.conf.file_path):
+            self.event("local modified")
