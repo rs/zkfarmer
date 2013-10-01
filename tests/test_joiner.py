@@ -34,6 +34,13 @@ class TestZkJoiner(KazooTestCase):
         patcher.start().return_value = self.NAME
         self.addCleanup(patcher.stop)
 
+    def test_inexisting_conf(self):
+        """Test we can work when the configuration does not exist yet."""
+        self.conf.read.return_value = None
+        z = ZkFarmJoiner(self.client, "/services/db", self.conf)
+        z.loop(3, timeout=self.TIMEOUT)
+        self.conf.write.assert_called_with({"hostname": self.NAME})
+
     def test_initialize_observer(self):
         """Test if observer is correctly initialized"""
         self.conf.read.return_value = {}
