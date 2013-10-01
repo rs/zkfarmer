@@ -226,7 +226,7 @@ class ZkFarmJoiner(ZkFarmWatcher):
     def exec_initial_setup(self):
         """Non-zookeeper related initial setup"""
         # Force the hostname info key
-        info = self.conf.read()
+        info = self.conf.read() or {}
         info['hostname'] = gethostname()
         self.conf.write(info)
         self.mzxid = None
