@@ -12,7 +12,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/..')
 
 from zkfarmer.conf import Conf
 from zkfarmer.utils import create_filter, dict_filter, ColorizingStreamHandler
-from zkfarmer import ZkFarmer
+from zkfarmer import ZkFarmer, VERSION
 
 from kazoo.client import KazooClient
 
@@ -27,7 +27,7 @@ def main():
                                      'Additionnaly, each node can carry its own configuration.',
                                      epilog='All your farms are belong to us')
 
-    parser.add_argument('-V', '--version', action='version', version='%(prog)s 0.1.0')
+    parser.add_argument('-V', '--version', action='version', version='%%(prog)s %s' % VERSION)
     parser.add_argument('-H', '--host', dest='host', default=os.environ.get('ZKHOST', 'localhost:2181'),
                         help='list of zookeeper hosts:port sperated by commas')
     group = parser.add_mutually_exclusive_group()
