@@ -8,7 +8,7 @@ from zkfarmer.utils import create_filter
 from kazoo.testing import KazooTestCase
 from mock import Mock, patch
 
-class FakeEvent(object):
+class FakeFileEvent(object):
     """Fake event for fake watchdog observer"""
     src_path = "/fake/root"
 
@@ -96,11 +96,30 @@ class TestZkJoiner(KazooTestCase):
         self.conf.reset_mock()
         self.conf.read.return_value = {"enabled": "0",
                                        "hostname": self.NAME}
-        z.dispatch(FakeEvent())
+        z.dispatch(FakeFileEvent())
         z.loop(4, timeout=self.TIMEOUT)
         self.assertFalse(self.conf.write.called)
         self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
                          {"enabled": "0",
+                          "hostname": self.NAME})
+
+    def test_detect_file_moved(self):
+        """Test if we can detect a file moved into our location."""
+        self.conf.read.return_value = {"enabled": "56",
+                                       "hostname": self.NAME}
+        z = ZkFarmJoiner(self.client, "/services/db", self.conf)
+        z.loop(3, timeout=self.TIMEOUT)
+        self.conf.reset_mock()
+        self.conf.read.return_value = {"enabled": "57",
+                                       "hostname": self.NAME}
+        f = FakeFileEvent()
+        f.src_path="/unrelated/path"
+        f.dst_path="/fake/root"
+        z.dispatch(f)
+        z.loop(4, timeout=self.TIMEOUT)
+        self.assertFalse(self.conf.write.called)
+        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
+                         {"enabled": "57",
                           "hostname": self.NAME})
 
     def test_zookeeper_modification(self):
@@ -151,7 +170,7 @@ class TestZkJoiner(KazooTestCase):
         self.conf.reset_mock()
         self.conf.read.return_value = {"enabled": "0",
                                        "hostname": self.NAME}
-        z.dispatch(FakeEvent())
+        z.dispatch(FakeFileEvent())
         z.loop(4, timeout=self.TIMEOUT)
         self.assertFalse(self.conf.write.called)
         self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
@@ -178,7 +197,7 @@ class TestZkJoiner(KazooTestCase):
         self.expire_session()
         self.conf.read.return_value = {"enabled": "22",
                                        "hostname": self.NAME}
-        z.dispatch(FakeEvent())
+        z.dispatch(FakeFileEvent())
         z.loop(10, timeout=self.TIMEOUT)
         self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
                          {"enabled": "22",
@@ -216,7 +235,7 @@ class TestZkJoiner(KazooTestCase):
         z = ZkFarmJoiner(self.client, "/services/db", self.conf)
         z.loop(3, timeout=self.TIMEOUT)
         self.expire_session()
-        z.dispatch(FakeEvent())
+        z.dispatch(FakeFileEvent())
         self.conf.read.return_value = {"enabled": "56",
                                        "hostname": self.NAME}
         self.client.ensure_path("/services/db/%s" % self.IP) # Disconnected, the path does not exist
@@ -246,7 +265,7 @@ class TestZkJoiner(KazooTestCase):
         self.conf.read.return_value = {"enabled": "1",
                                        "hostname": self.NAME,
                                        "counter": 1001}
-        z.dispatch(FakeEvent())
+        z.dispatch(FakeFileEvent())
         z.loop(1, timeout=self.TIMEOUT)
         # Here comes the local modification that won't be noticed now
         self.conf.reset_mock()
