@@ -215,6 +215,14 @@ class TestConfPHP(TempDirectoryTestCase):
         self.assertRaises(TypeError, a.write, json)
         self.assertEqual(a.read(), {"1": "2"})
 
+    def test_php_write_list(self):
+        """Check we can write a list correctly."""
+        name = "%s/test.php" % self.tmpdir
+        a = conf.Conf(name, "php")
+        a.write({"something": [1,2,3]})
+        with open(name) as f:
+            self.assertIn('array(1,2,3)', f.read())
+
 class TestConfDir(TempDirectoryTestCase):
 
     def test_dir_from_existence(self):
