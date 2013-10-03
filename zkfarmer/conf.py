@@ -133,7 +133,7 @@ class ConfPHP(ConfFile):
             body = ',\n'.join(['%s"%s" => %s' % (indent + self.indent, self._quotemeta(key), self._dump(val, lvl + 1)) for key, val in value.items()])
             return 'array\n%s(\n%s\n%s)' % (indent, body, indent)
         elif type(value) == list:
-            return 'array(%s)' % ','.join([self._dump(val) for val in value])
+            return 'array(%s)' % ','.join([str(self._dump(val)) for val in value])
         else:
             raise TypeError('php_dump: cannot serialize value: %s' % type(value))
 
