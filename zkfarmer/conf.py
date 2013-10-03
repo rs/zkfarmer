@@ -128,6 +128,10 @@ class ConfPHP(ConfFile):
             return value
         elif isinstance(value, (str, unicode)):
             return '"%s"' % self._quotemeta(value)
+        elif type(value) == bool:
+            if value:
+                return 'true'
+            return 'false'
         elif type(value) == dict:
             indent = lvl * self.indent
             body = ',\n'.join(['%s"%s" => %s' % (indent + self.indent, self._quotemeta(key), self._dump(val, lvl + 1)) for key, val in value.items()])

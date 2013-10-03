@@ -223,6 +223,16 @@ class TestConfPHP(TempDirectoryTestCase):
         with open(name) as f:
             self.assertIn('array(1,2,3)', f.read())
 
+    def test_php_write_boolean(self):
+        """Check we can handle booleans."""
+        name = "%s/test.php" % self.tmpdir
+        a = conf.Conf(name, "php")
+        a.write({"something": True, "somethingelse": False})
+        with open(name) as f:
+            self.assertIn('true', f.read())
+        with open(name) as f:
+            self.assertIn('false', f.read())
+
 class TestConfDir(TempDirectoryTestCase):
 
     def test_dir_from_existence(self):
