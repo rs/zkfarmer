@@ -294,5 +294,6 @@ class ZkFarmJoiner(ZkFarmWatcher):
     def dispatch(self, event):
         """A local change has occured"""
         if hasattr(event, "src_path") and event.src_path.startswith(self.conf.file_path) \
-           or hasattr(event, "dst_path") and event.dst_path.startswith(self.conf.file_path):
+           or hasattr(event, "dst_path") and event.dst_path.startswith(self.conf.file_path) \
+           or hasattr(event, "dest_path") and event.dest_path.startswith(self.conf.file_path):
             self.event("local modified")
