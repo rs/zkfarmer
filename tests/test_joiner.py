@@ -18,10 +18,21 @@ class TestZkJoiner(KazooTestCase):
     IP = "1.1.1.1"
     TIMEOUT = 0.1
 
+    def addCleanup(self, function):
+        # On Python 2.6, we don't have this function. Try to implement
+        # a degraded version of it.
+        try:
+            super(TestZkJoiner, self).addCleanup(function)
+        except AttributeError:
+            # We don't have that, maybe Python 2.6
+            self._compat_cleanups.append(function)
+
     def setUp(self):
-        KazooTestCase.setUp(self)
+        super(TestZkJoiner, self).setUp()
         self.conf = Mock(spec=ConfJSON)
         self.conf.file_path = "/fake/root"
+
+        self._compat_cleanups = []
 
         # Fake observer
         patcher = patch("zkfarmer.watcher.Observer", spec=True)
@@ -37,6 +48,18 @@ class TestZkJoiner(KazooTestCase):
         patcher = patch("zkfarmer.watcher.gethostname")
         patcher.start().return_value = self.NAME
         self.addCleanup(patcher.stop)
+
+    def tearDown(self):
+        while self._compat_cleanups:
+            f = self._compat_cleanups.pop(-1)
+            try:
+                f()
+            except KeyboardInterrupt:
+                raise
+            except:
+                # To complex to implement correctly.
+                pass
+        return super(TestZkJoiner, self).tearDown()
 
     def test_inexisting_conf(self):
         """Test we can work when the configuration does not exist yet."""
