@@ -12,8 +12,14 @@ from zkfarmer import conf
 
 class TempDirectoryTestCase(unittest.TestCase):
 
+    def _compat_assertIn(self, a, b):
+        # Python 2.6 compat
+        self.assertTrue(a in b)
+
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
+        if not hasattr(self, "assertIn"):
+            self.assertIn = self._compat_assertIn
     def tearDown(self):
         shutil.rmtree(self.tmpdir)
 
@@ -21,13 +27,11 @@ class TestConf(unittest.TestCase):
 
     def test_bad_format(self):
         """Check if we get the right exception if we specify a bad format."""
-        with self.assertRaises(ValueError):
-            conf.Conf("dunno.txt", "inexistant")
+        self.assertRaises(ValueError, conf.Conf, "dunno.txt", "inexistant")
 
     def test_bad_extension(self):
         """Check we get the right exception if we specify a bad extension."""
-        with self.assertRaises(ValueError):
-            conf.Conf("dunno.dunno")
+        self.assertRaises(ValueError, conf.Conf, "dunno.dunno")
 
 class TestConfJSON(TempDirectoryTestCase):
 
@@ -203,8 +207,7 @@ class TestConfPHP(TempDirectoryTestCase):
     def test_php_read(self):
         """Check we can't read PHP"""
         name = "%s/test.php" % self.tmpdir
-        with self.assertRaises(NotImplementedError):
-            conf.Conf(name).read()
+        self.assertRaises(NotImplementedError, conf.Conf(name).read)
 
     def test_php_no_overwrite_on_failure(self):
         """Check we don't overwrite an existing file in case of failure."""
