@@ -117,33 +117,34 @@ class ConfYAML(ConfFile):
 
 
 class ConfPHP(ConfFile):
-    meta = {'"': '\\"', "\0": "\\\0", "\n": "\\n", "\\": "\\\\"}
-    indent = '    '
+    meta = {u'"': u'\\"', u"\0": u"\\\0", u"\n": u"\\n", u"\\": u"\\\\"}
+    indent = u'    '
 
     def _quotemeta(self, value):
-        return ''.join(self.meta.get(c, c) for c in value)
+        return u''.join(self.meta.get(c, c) for c in value)
 
     def _dump(self, value, lvl=0):
         if type(value) == int:
             return value
         elif isinstance(value, (str, unicode)):
-            return '"%s"' % self._quotemeta(value)
+            return u'"%s"' % self._quotemeta(value)
         elif type(value) == bool:
             if value:
-                return 'true'
-            return 'false'
+                return u'true'
+            return u'false'
         elif type(value) == dict:
             indent = lvl * self.indent
-            body = ',\n'.join(['%s"%s" => %s' % (indent + self.indent, self._quotemeta(key), self._dump(val, lvl + 1)) for key, val in value.items()])
-            return 'array\n%s(\n%s\n%s)' % (indent, body, indent)
+            body = u',\n'.join([u'%s"%s" => %s' % (indent + self.indent, self._quotemeta(key), self._dump(val, lvl + 1)) for key, val in value.items()])
+            return u'array\n%s(\n%s\n%s)' % (indent, body, indent)
         elif type(value) == list:
-            return 'array(%s)' % ','.join([str(self._dump(val)) for val in value])
+            return u'array(%s)' % ','.join([unicode(self._dump(val)) for val in value])
         else:
             raise TypeError('php_dump: cannot serialize value: %s' % type(value))
 
     def write(self, obj):
         with self.open(write=True) as fd:
-            fd.write('<?php return %s;' % self._dump(obj))
+            php = u'<?php return %s;' % self._dump(obj)
+            fd.write(php.encode("utf-8", errors="ignore"))
 
 
 class ConfDir(ConfFile):
