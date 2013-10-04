@@ -297,3 +297,43 @@ class TestZkJoiner(KazooTestCase):
                                        "counter": 1002}
         z.loop(3, timeout=self.TIMEOUT)
         self.assertFalse(self.conf.write.called)
+
+    def test_common_node(self):
+        """Check we can request a common node"""
+        self.conf.read.return_value = {"enabled": "1",
+                                       "maintainance": "2"}
+        z = ZkFarmJoiner(self.client, "/services/db", self.conf, True)
+        z.loop(3, timeout=self.TIMEOUT)
+        # Check we don't get the hostname
+        self.conf.write.assert_called_with({"enabled": "1",
+                                            "maintainance": "2"})
+        # Check the node exists
+        n = self.client.get("/services/db/common")
+        self.assertEqual(n[0],
+                         json.dumps({"enabled": "1",
+                                     "maintainance": "2"}))
+        self.assertEqual(n[1].ephemeralOwner, 0)
+
+    def test_common_node_join_when_local_modifications(self):
+        """Check that we get remote modification when using a common node"""
+        self.conf.read.return_value = { "enabled": "1" }
+        self.client.ensure_path("/services/db/common")
+        self.client.set("/services/db/common", json.dumps({ "enabled": "42" }))
+        z = ZkFarmJoiner(self.client, "/services/db", self.conf, True)
+        z.loop(3, timeout=self.TIMEOUT)
+        self.conf.write.assert_called_with({ "enabled": "42" })
+        n = self.client.get("/services/db/common")
+        self.assertEqual(n[0],
+                         json.dumps({"enabled": "42"}))
+
+    def test_common_node_disconnect_and_local_modifications(self):
+        """Check that remote modifications take over local modifications for a common node"""
+        self.conf.read.return_value = {"enabled": "1"}
+        z = ZkFarmJoiner(self.client, "/services/db", self.conf, True)
+        z.loop(3, timeout=self.TIMEOUT)
+        self.expire_session()
+        self.conf.read.return_value = {"enabled": "22"}
+        z.dispatch(FakeFileEvent())
+        z.loop(10, timeout=self.TIMEOUT)
+        self.assertEqual(json.loads(self.client.get("/services/db/common")[0]),
+                         {"enabled": "1"})
