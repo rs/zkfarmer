@@ -1,3 +1,5 @@
+# -*- encoding: utf-8 -*-
+
 import unittest
 import tempfile
 import shutil
@@ -68,6 +70,14 @@ class TestConfJSON(TempDirectoryTestCase):
             json.dump({1: "cc"}, f)
         a = conf.Conf(name)
         self.assertEqual(a.read(), {"1": "cc"})
+
+    def test_json_read_utf8(self):
+        """Check we can read an UTF-8 encoded JSON file."""
+        name = "%s/test.json" % self.tmpdir
+        with open(name, "w") as f:
+            f.write('["😍", 123]')
+        a = conf.Conf(name)
+        self.assertEqual(a.read(), ['😍'.decode('utf-8'), 123])
 
     def test_json_read_not_exist(self):
         """Check we get `None` when asking for an inexistant file."""
@@ -235,6 +245,15 @@ class TestConfPHP(TempDirectoryTestCase):
             self.assertIn('true', f.read())
         with open(name) as f:
             self.assertIn('false', f.read())
+
+    def test_php_utf8_encoded(self):
+        """Check we get UTF-8 encoded output."""
+        name = "%s/test.php" % self.tmpdir
+        a = conf.Conf(name, "php")
+        a.write(["ascii", "😍".decode("utf-8")])
+        with open(name) as f:
+            result = f.read()
+            self.assertIn('"\xf0\x9f\x98\x8d"', result)
 
 class TestConfDir(TempDirectoryTestCase):
 
