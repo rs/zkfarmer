@@ -144,7 +144,7 @@ class ConfPHP(ConfFile):
     def write(self, obj):
         with self.open(write=True) as fd:
             php = u'<?php return %s;' % self._dump(obj)
-            fd.write(php.encode("utf-8", errors="ignore"))
+            fd.write(php.encode("utf-8", "ignore"))
 
 
 class ConfDir(ConfFile):
