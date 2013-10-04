@@ -208,10 +208,12 @@ class ZkFarmJoiner(ZkFarmWatcher):
                "connection recovered":   [("lost",      "observer ready"),
                                           ("observer ready", "observer ready")]}
 
-    def __init__(self, zkconn, root_node_path, conf):
+    def __init__(self, zkconn, root_node_path, conf, common=False):
         super(ZkFarmJoiner, self).__init__(zkconn)
-        self.node_path = "%s/%s" % (root_node_path, ip())
         self.conf = conf
+        self.common = common
+        self.node_path = "%s/%s" % (root_node_path,
+                                    common and "common" or ip())
 
         self.event("initial setup")
 
@@ -227,7 +229,8 @@ class ZkFarmJoiner(ZkFarmWatcher):
         """Non-zookeeper related initial setup"""
         # Force the hostname info key
         info = self.conf.read() or {}
-        info['hostname'] = gethostname()
+        if not self.common:
+            info['hostname'] = gethostname()
         self.conf.write(info)
         self.mzxid = None
 
@@ -246,10 +249,15 @@ class ZkFarmJoiner(ZkFarmWatcher):
         try:
             self.zkconn.ensure_path(os.path.dirname(self.node_path))
             self.zkconn.create(self.node_path, serialize(self.conf.read()),
-                               acl=OPEN_ACL_UNSAFE, ephemeral=True)
+                               acl=OPEN_ACL_UNSAFE, ephemeral=(not self.common))
         except NodeExistsError:
-            # Already exists. Our content is authoritative.
-            self.event("local modified")
+            # Already exists.
+            if self.common:
+                # Remote content is authoritative
+                self.event("znode modified")
+            else:
+                # Our content is authoritative.
+                self.event("local modified")
         # Setup the watcher
         self.zkconn.get(self.node_path, self.watch_node)
         self.monitored = True
