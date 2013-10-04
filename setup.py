@@ -28,5 +28,7 @@ setup(
     license='LICENSE',
     description='Easy distributed server farm management using Apache ZooKeeper.',
     long_description=open('README.md').read(),
-    install_requires=parse_requirements('requirements.txt')
+    install_requires=parse_requirements('requirements.txt'),
+    tests_require = [ "nose", "mock" ] + parse_requirements('requirements.txt'),
+    test_suite="nose.collector"
 )
