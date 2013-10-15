@@ -46,9 +46,11 @@ The `zkfarmer join` command transformed it to the following JSON object and stor
 
 While the `zkfarmer join` command is running, this znode will be maintained up to date with local configuration and vis versa. For instance if you do an `echo 1 > /var/service/db/enabled` from the host, the change will be immediately reflected into the znode JSON content. Any change on the content of the znode will also update the local configuration on the host.
 
+While this is not the primary goal of zkfarmer, you can also use it to synchronize a common configuration among a set of nodes. In this case, each node will use the same znode. You need to use the `--common` option when running `zkfarmer join` in this case. The JSON object will be stored in `/services/db/common` znode.
+
 Usage for the `zkfarmer join` command:
 
-    usage: zkfarmer join [-h] [-f {json,yaml,php,dir}] zknode conf
+    usage: zkfarmer join [-h] [-f {json,yaml,php,dir}] [-c] zknode conf
 
     Make the current host to join a farm.
 
@@ -60,6 +62,7 @@ Usage for the `zkfarmer join` command:
       -h, --help            show this help message and exit
       -f {json,yaml,php,dir}, --format {json,yaml,php,dir}
                             set the configuration format
+      -c, --common          use a common zookeeper node instead of a dedicate node
 
 Syncing Farm Configuration
 --------------------------
