@@ -133,6 +133,27 @@ Usage for the `zkfarmer export` command:
                             predicates separeted by commas (ex:
                             enabled=0,replication_delay<10,!maintenance)
 
+One-way Sync to Zookeeper
+-------------------------
+
+`zkfarmer export` will copy the configuration from zookeeper to the local filesystem while `zkfarmer join` will keep a znode in sync with a part of the local filesystem. In certain case, the bidirectional sync of `zkfarmer join` may be undesirable. In this case, you can use `zkfarmer import` which acts like `zkfarmer join` but does not react to remote changes. Only a local change will trigger a synchronisation to ZooKeeper. The most common use-case for this command is the use of `--common` flag.
+
+Usage for the `zkfarmer import` command:
+
+    usage: zkfarmer import [-h] [-f {json,yaml,php,dir}] [-c] zknode conf
+
+    Import the current host configuration to a farm.
+
+    positional arguments:
+      zknode                the ZooKeeper node path of the farm
+      conf                  Path to the node configuration
+
+    optional arguments:
+      -h, --help            show this help message and exit
+      -f {json,yaml,php,dir}, --format {json,yaml,php,dir}
+                            set the configuration format
+      -c, --common          use a common zookeeper node instead of a dedicated node
+
 Managing Farms
 --------------
 
