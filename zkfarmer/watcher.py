@@ -186,9 +186,8 @@ class ZkFarmExporter(ZkFarmWatcher):
         self.monitored.remove(what.path)
         self.event("children modified")
 
-class ZkFarmJoiner(ZkFarmWatcher):
+class ZkFarmImporter(ZkFarmWatcher):
 
-    # States:
     #   - initial: not ready, all initial setup should be done
     #   - observer ready: not ready but observer is initialized
     #   - idle: initial setup has been done, ready to accept events
@@ -209,16 +208,13 @@ class ZkFarmJoiner(ZkFarmWatcher):
                                           ("observer ready", "observer ready")]}
 
     def __init__(self, zkconn, root_node_path, conf, common=False):
-        super(ZkFarmJoiner, self).__init__(zkconn)
+        super(ZkFarmImporter, self).__init__(zkconn)
         self.conf = conf
         self.common = common
         self.node_path = "%s/%s" % (root_node_path,
                                     common and "common" or ip())
 
         self.event("initial setup")
-
-    def watch_node(self, what):
-        self.event("znode modified")
 
     def exec_connection_recovered(self):
         """The connection is reestablished"""
@@ -227,13 +223,6 @@ class ZkFarmJoiner(ZkFarmWatcher):
 
     def exec_initial_setup(self):
         """Non-zookeeper related initial setup"""
-        # Force the hostname info key
-        info = self.conf.read() or {}
-        if not self.common:
-            info['hostname'] = gethostname()
-        self.conf.write(info)
-        self.mzxid = None
-
         # Setup observer
         observer = Observer()
         path = self.conf.file_path
@@ -242,6 +231,7 @@ class ZkFarmJoiner(ZkFarmWatcher):
         observer.schedule(self, path=path, recursive=True)
         observer.start()
 
+        self.mzxid = None
         self.event("initial znode setup")
 
     def exec_initial_znode_setup(self):
@@ -258,14 +248,14 @@ class ZkFarmJoiner(ZkFarmWatcher):
             else:
                 # Our content is authoritative.
                 self.event("local modified")
-        # Setup the watcher
-        self.zkconn.get(self.node_path, self.watch_node)
-        self.monitored = True
+
     def exec_initial_znode_setup_from_idle(self):
         # This may happen because we recovered the connection several times
         pass
 
     def exec_local_modified(self):
+        pass
+    def exec_znode_modified(self):
         pass
     def exec_local_modified_from_idle(self):
         """Check a local modification"""
@@ -278,8 +268,37 @@ class ZkFarmJoiner(ZkFarmWatcher):
             s = self.zkconn.set(self.node_path, serialize(new_conf))
             self.mzxid = s.mzxid # Record latest mzxid
 
+    def dispatch(self, event):
+        """A local change has occured"""
+        if hasattr(event, "src_path") and event.src_path.startswith(self.conf.file_path) \
+           or hasattr(event, "dst_path") and event.dst_path.startswith(self.conf.file_path) \
+           or hasattr(event, "dest_path") and event.dest_path.startswith(self.conf.file_path):
+            self.event("local modified")
+
+class ZkFarmJoiner(ZkFarmImporter):
+
+    def watch_node(self, what):
+        self.event("znode modified")
+
+    def exec_initial_setup(self):
+        """Non-zookeeper related initial setup"""
+        # Force the hostname info key
+        info = self.conf.read() or {}
+        if not self.common:
+            info['hostname'] = gethostname()
+        self.conf.write(info)
+
+        super(ZkFarmJoiner, self).exec_initial_setup()
+
+    def exec_initial_znode_setup(self):
+        super(ZkFarmJoiner, self).exec_initial_znode_setup()
+        # Setup the watcher
+        self.zkconn.get(self.node_path, self.watch_node)
+        self.monitored = True
+
     def exec_znode_modified(self):
         self.monitored = False
+
     def exec_znode_modified_from_idle(self):
         """Check remote modification"""
         current_conf = self.conf.read()
@@ -298,10 +317,3 @@ class ZkFarmJoiner(ZkFarmWatcher):
                 self.conf.write(new_conf)
         except NoNodeError:
             logger.warn("not able to watch for node %s: not exist anymore" % self.node_path)
-
-    def dispatch(self, event):
-        """A local change has occured"""
-        if hasattr(event, "src_path") and event.src_path.startswith(self.conf.file_path) \
-           or hasattr(event, "dst_path") and event.dst_path.startswith(self.conf.file_path) \
-           or hasattr(event, "dest_path") and event.dest_path.startswith(self.conf.file_path):
-            self.event("local modified")
