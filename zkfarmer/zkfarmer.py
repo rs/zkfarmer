@@ -6,7 +6,7 @@
 # file that was distributed with this source code.
 
 from .utils import serialize, unserialize, dict_set_path, dict_filter, create_filter
-from .watcher import ZkFarmJoiner, ZkFarmExporter
+from .watcher import ZkFarmJoiner, ZkFarmExporter, ZkFarmImporter
 
 from kazoo.client import OPEN_ACL_UNSAFE
 from kazoo.exceptions import NoNodeError, BadVersionError
@@ -30,6 +30,9 @@ class ZkFarmer(object):
                 self.set(zknode, 'size', current_size)
         # Join the farm
         ZkFarmJoiner(self.zkconn, zknode, conf, common).loop(ignore_unknown_transitions=True)
+
+    def importer(self, zknode, conf, common=False):
+        ZkFarmImporter(self.zkconn, zknode, conf, common).loop(ignore_unknown_transitions=True)
 
     def export(self, zknode, conf, updated_handler=None, filters=None):
         ZkFarmExporter(self.zkconn, zknode, conf,

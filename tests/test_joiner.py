@@ -3,7 +3,7 @@ import json
 from nose.plugins.skip import SkipTest
 
 from zkfarmer.conf import ConfJSON
-from zkfarmer.watcher import ZkFarmJoiner
+from zkfarmer.watcher import ZkFarmJoiner, ZkFarmImporter
 from zkfarmer.utils import create_filter
 from kazoo.testing import KazooTestCase
 from mock import Mock, patch
@@ -12,23 +12,24 @@ class FakeFileEvent(object):
     """Fake event for fake watchdog observer"""
     src_path = "/fake/root"
 
-class TestZkJoiner(KazooTestCase):
+class TestZkImporter(KazooTestCase):
 
     NAME = "zk-test"
     IP = "1.1.1.1"
     TIMEOUT = 0.1
+    Z = ZkFarmImporter
 
     def addCleanup(self, function):
         # On Python 2.6, we don't have this function. Try to implement
         # a degraded version of it.
         try:
-            super(TestZkJoiner, self).addCleanup(function)
+            super(TestZkImporter, self).addCleanup(function)
         except AttributeError:
             # We don't have that, maybe Python 2.6
             self._compat_cleanups.append(function)
 
     def setUp(self):
-        super(TestZkJoiner, self).setUp()
+        super(TestZkImporter, self).setUp()
         self.conf = Mock(spec=ConfJSON)
         self.conf.file_path = "/fake/root"
 
@@ -59,36 +60,21 @@ class TestZkJoiner(KazooTestCase):
             except:
                 # To complex to implement correctly.
                 pass
-        return super(TestZkJoiner, self).tearDown()
-
-    def test_inexisting_conf(self):
-        """Test we can work when the configuration does not exist yet."""
-        self.conf.read.return_value = None
-        z = ZkFarmJoiner(self.client, "/services/db", self.conf)
-        z.loop(3, timeout=self.TIMEOUT)
-        self.conf.write.assert_called_with({"hostname": self.NAME})
+        return super(TestZkImporter, self).tearDown()
 
     def test_initialize_observer(self):
         """Test if observer is correctly initialized"""
         self.conf.read.return_value = {}
-        z = ZkFarmJoiner(self.client, "/services/db", self.conf)
+        z = self.Z(self.client, "/services/db", self.conf)
         z.loop(3, timeout=self.TIMEOUT)
         self.mock_observer.schedule.assert_called_once_with(z, path="/fake", recursive=True)
         self.mock_observer.start.assert_called_once_with()
-
-    def test_set_hostname(self):
-        """Check if hostname is correctly set into configuration file"""
-        self.conf.read.return_value = {"enabled": "1"}
-        z = ZkFarmJoiner(self.client, "/services/db", self.conf)
-        z.loop(1, timeout=self.TIMEOUT)
-        self.conf.write.assert_called_with({"enabled": "1",
-                                            "hostname": self.NAME})
 
     def test_initial_set(self):
         """Check if znode is correctly created into ZooKeeper"""
         self.conf.read.return_value = {"enabled": "1",
                                        "hostname": self.NAME}
-        z = ZkFarmJoiner(self.client, "/services/db", self.conf)
+        z = self.Z(self.client, "/services/db", self.conf)
         z.loop(3, timeout=self.TIMEOUT)
         self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
                          {"enabled": "1",
@@ -98,7 +84,7 @@ class TestZkJoiner(KazooTestCase):
         """Check if created znode is ephemereal"""
         self.conf.read.return_value = {"enabled": "1",
                                        "hostname": self.NAME}
-        z = ZkFarmJoiner(self.client, "/services/db", self.conf)
+        z = self.Z(self.client, "/services/db", self.conf)
         z.loop(2, timeout=self.TIMEOUT)
         self.assertEqual(self.client.get("/services/db/%s" % self.IP)[1].ephemeralOwner,
                          self.client.client_id[0])
@@ -114,7 +100,7 @@ class TestZkJoiner(KazooTestCase):
         """Check if ZooKeeper is updated after a local modification"""
         self.conf.read.return_value = {"enabled": "1",
                                        "hostname": self.NAME}
-        z = ZkFarmJoiner(self.client, "/services/db", self.conf)
+        z = self.Z(self.client, "/services/db", self.conf)
         z.loop(3, timeout=self.TIMEOUT)
         self.conf.reset_mock()
         self.conf.read.return_value = {"enabled": "0",
@@ -130,7 +116,7 @@ class TestZkJoiner(KazooTestCase):
         """Test if we can detect a file moved into our location."""
         self.conf.read.return_value = {"enabled": "56",
                                        "hostname": self.NAME}
-        z = ZkFarmJoiner(self.client, "/services/db", self.conf)
+        z = self.Z(self.client, "/services/db", self.conf)
         z.loop(3, timeout=self.TIMEOUT)
         self.conf.reset_mock()
         self.conf.read.return_value = {"enabled": "57",
@@ -144,6 +130,79 @@ class TestZkJoiner(KazooTestCase):
         self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
                          {"enabled": "57",
                           "hostname": self.NAME})
+
+    def test_zookeeper_modification(self):
+        """Check if local configuration is *NOT* updated after remote modification"""
+        self.conf.read.return_value = {"enabled": "1",
+                                       "hostname": self.NAME}
+        z = self.Z(self.client, "/services/db", self.conf)
+        z.loop(3, timeout=self.TIMEOUT)
+        self.conf.reset_mock()
+        self.client.set("/services/db/%s" % self.IP,
+                        json.dumps({"enabled": "0",
+                                    "hostname": self.NAME}))
+        z.loop(2, timeout=self.TIMEOUT)
+        self.assertFalse(self.conf.write.called)
+
+    def test_disconnect(self):
+        """Test we handle a disconnect correctly"""
+        self.conf.read.return_value = {"enabled": "1",
+                                       "hostname": self.NAME}
+        z = self.Z(self.client, "/services/db", self.conf)
+        z.loop(3, timeout=self.TIMEOUT)
+        self.expire_session()
+        z.loop(8, timeout=self.TIMEOUT)
+        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
+                         {"enabled": "1",
+                          "hostname": self.NAME})
+        return z
+
+    def test_disconnect_and_local_modification(self):
+        """Test we handle disconnect and local modification after reconnect"""
+        z = self.test_disconnect()
+        self.conf.reset_mock()
+        self.conf.read.return_value = {"enabled": "0",
+                                       "hostname": self.NAME}
+        z.dispatch(FakeFileEvent())
+        z.loop(4, timeout=self.TIMEOUT)
+        self.assertFalse(self.conf.write.called)
+        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
+                         {"enabled": "0",
+                          "hostname": self.NAME})
+
+    def test_disconnect_while_local_modification(self):
+        """Test we can disconnect and have a local modification while disconnected"""
+        self.conf.read.return_value = {"enabled": "1",
+                                       "hostname": self.NAME}
+        z = self.Z(self.client, "/services/db", self.conf)
+        z.loop(3, timeout=self.TIMEOUT)
+        self.expire_session()
+        self.conf.read.return_value = {"enabled": "22",
+                                       "hostname": self.NAME}
+        z.dispatch(FakeFileEvent())
+        z.loop(10, timeout=self.TIMEOUT)
+        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
+                         {"enabled": "22",
+                          "hostname": self.NAME})
+
+class TestZkJoiner(TestZkImporter):
+
+    Z = ZkFarmJoiner
+
+    def test_set_hostname(self):
+        """Check if hostname is correctly set into configuration file"""
+        self.conf.read.return_value = {"enabled": "1"}
+        z = self.Z(self.client, "/services/db", self.conf)
+        z.loop(1, timeout=self.TIMEOUT)
+        self.conf.write.assert_called_with({"enabled": "1",
+                                            "hostname": self.NAME})
+
+    def test_inexisting_conf(self):
+        """Test we can work when the configuration does not exist yet."""
+        self.conf.read.return_value = None
+        z = self.Z(self.client, "/services/db", self.conf)
+        z.loop(3, timeout=self.TIMEOUT)
+        self.conf.write.assert_called_with({"hostname": self.NAME})
 
     def test_zookeeper_modification(self):
         """Check if local configuration is updated after remote modification"""
@@ -174,32 +233,6 @@ class TestZkJoiner(KazooTestCase):
         z.loop(2, timeout=self.TIMEOUT)
         self.assertFalse(self.conf.write.called)
 
-    def test_disconnect(self):
-        """Test we handle a disconnect correctly"""
-        self.conf.read.return_value = {"enabled": "1",
-                                       "hostname": self.NAME}
-        z = ZkFarmJoiner(self.client, "/services/db", self.conf)
-        z.loop(3, timeout=self.TIMEOUT)
-        self.expire_session()
-        z.loop(8, timeout=self.TIMEOUT)
-        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
-                         {"enabled": "1",
-                          "hostname": self.NAME})
-        return z
-
-    def test_disconnect_and_local_modification(self):
-        """Test we handle disconnect and local modification after reconnect"""
-        z = self.test_disconnect()
-        self.conf.reset_mock()
-        self.conf.read.return_value = {"enabled": "0",
-                                       "hostname": self.NAME}
-        z.dispatch(FakeFileEvent())
-        z.loop(4, timeout=self.TIMEOUT)
-        self.assertFalse(self.conf.write.called)
-        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
-                         {"enabled": "0",
-                          "hostname": self.NAME})
-
     def test_disconnect_and_remote_modification(self):
         """Test we handle disconnect and remote modification after reconnect"""
         z = self.test_disconnect()
@@ -210,21 +243,6 @@ class TestZkJoiner(KazooTestCase):
         z.loop(2, timeout=self.TIMEOUT)
         self.conf.write.assert_called_once_with({"enabled": "22",
                                                  "hostname": self.NAME})
-
-    def test_disconnect_while_local_modification(self):
-        """Test we can disconnect and have a local modification while disconnected"""
-        self.conf.read.return_value = {"enabled": "1",
-                                       "hostname": self.NAME}
-        z = ZkFarmJoiner(self.client, "/services/db", self.conf)
-        z.loop(3, timeout=self.TIMEOUT)
-        self.expire_session()
-        self.conf.read.return_value = {"enabled": "22",
-                                       "hostname": self.NAME}
-        z.dispatch(FakeFileEvent())
-        z.loop(10, timeout=self.TIMEOUT)
-        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
-                         {"enabled": "22",
-                          "hostname": self.NAME})
 
     def test_disconnect_while_remote_modification(self):
         """Test we can disconnect and have a remote modification while disconnected"""
@@ -302,7 +320,7 @@ class TestZkJoiner(KazooTestCase):
         """Check we can request a common node"""
         self.conf.read.return_value = {"enabled": "1",
                                        "maintainance": "2"}
-        z = ZkFarmJoiner(self.client, "/services/db", self.conf, True)
+        z = self.Z(self.client, "/services/db", self.conf, True)
         z.loop(3, timeout=self.TIMEOUT)
         # Check we don't get the hostname
         self.conf.write.assert_called_with({"enabled": "1",
@@ -319,7 +337,7 @@ class TestZkJoiner(KazooTestCase):
         self.conf.read.return_value = { "enabled": "1" }
         self.client.ensure_path("/services/db/common")
         self.client.set("/services/db/common", json.dumps({ "enabled": "42" }))
-        z = ZkFarmJoiner(self.client, "/services/db", self.conf, True)
+        z = self.Z(self.client, "/services/db", self.conf, True)
         z.loop(3, timeout=self.TIMEOUT)
         self.conf.write.assert_called_with({ "enabled": "42" })
         n = self.client.get("/services/db/common")
@@ -329,7 +347,7 @@ class TestZkJoiner(KazooTestCase):
     def test_common_node_disconnect_and_local_modifications(self):
         """Check that remote modifications take over local modifications for a common node"""
         self.conf.read.return_value = {"enabled": "1"}
-        z = ZkFarmJoiner(self.client, "/services/db", self.conf, True)
+        z = self.Z(self.client, "/services/db", self.conf, True)
         z.loop(3, timeout=self.TIMEOUT)
         self.expire_session()
         self.conf.read.return_value = {"enabled": "22"}

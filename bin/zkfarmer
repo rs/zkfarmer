@@ -49,6 +49,16 @@ def main():
     subparser.add_argument('-c', '--common', dest='common', action='store_true',
                            help='use a common zookeeper node instead of a dedicate node')
 
+    # The `import' sub-command
+    subparser = subparsers.add_parser('import', help='import the current host configuration to a farm',
+                                      description='Import the current host configuration to a farm.')
+    subparser.add_argument('zknode', help='the ZooKeeper node path of the farm')
+    subparser.add_argument('conf', help='Path to the node configuration')
+    subparser.add_argument('-f', '--format', dest='format', choices=['json', 'yaml', 'php', 'dir'],
+                           help='set the configuration format')
+    subparser.add_argument('-c', '--common', dest='common', action='store_true',
+                           help='use a common zookeeper node instead of a dedicate node')
+
     # The `export' sub-command
     subparser = subparsers.add_parser('export', help='exports and maintain farm\'s nodes configuration',
                                       description='Export and maintain a representation of the current farm\' nodes\' list ' +
@@ -139,7 +149,7 @@ def main():
     # Syslog level. Default to WARN unless we use 'join' or
     # 'export'. In this case, default to INFO.
     level = args.verbose or 0
-    if args.command in ['join', 'export']:
+    if args.command in ['join', 'export', 'import']:
         level += 1
     if args.quiet:
         level = 0
@@ -187,6 +197,9 @@ def main():
 
     elif args.command == 'join':
         farmer.join(args.zknode, conf, args.common)
+
+    elif args.command == 'import':
+        farmer.importer(args.zknode, conf, args.common)
 
     elif args.command == 'ls':
         fields = args.fields.split(',') if args.fields else []
