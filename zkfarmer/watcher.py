@@ -216,6 +216,14 @@ class ZkFarmImporter(ZkFarmWatcher):
 
         self.event("initial setup")
 
+    def _safe_local_conf(self):
+        """Return the current local configuration or {} on errors"""
+        try:
+            return self.conf.read() or {} # Maybe the file does not exist
+        except Exception as e:
+            logger.warn("Cannot read local configuration: %s" % e)
+            return {}
+
     def exec_connection_recovered(self):
         """The connection is reestablished"""
         logger.info("Connnection with Zookeeper reestablished")
@@ -238,7 +246,7 @@ class ZkFarmImporter(ZkFarmWatcher):
         """Initial setup of znode"""
         try:
             self.zkconn.ensure_path(os.path.dirname(self.node_path))
-            self.zkconn.create(self.node_path, serialize(self.conf.read()),
+            self.zkconn.create(self.node_path, serialize(self._safe_local_conf()),
                                acl=OPEN_ACL_UNSAFE, ephemeral=(not self.common))
         except NodeExistsError:
             # Already exists.
@@ -260,7 +268,11 @@ class ZkFarmImporter(ZkFarmWatcher):
     def exec_local_modified_from_idle(self):
         """Check a local modification"""
         current_conf = unserialize(self.zkconn.get(self.node_path)[0])
-        new_conf = self.conf.read()
+        try:
+            new_conf = self.conf.read()
+        except Exception as e:
+            logger.warn("Ignoring invalid local configuration: %s" % e)
+            return
         if current_conf != new_conf:
             logger.info('Local conf changed')
             logger.debug('Previous conf:   %r' % current_conf)
@@ -283,7 +295,7 @@ class ZkFarmJoiner(ZkFarmImporter):
     def exec_initial_setup(self):
         """Non-zookeeper related initial setup"""
         # Force the hostname info key
-        info = self.conf.read() or {}
+        info = self._safe_local_conf()
         if not self.common:
             info['hostname'] = gethostname()
         self.conf.write(info)
@@ -301,7 +313,11 @@ class ZkFarmJoiner(ZkFarmImporter):
 
     def exec_znode_modified_from_idle(self):
         """Check remote modification"""
-        current_conf = self.conf.read()
+        try:
+            current_conf = self.conf.read()
+        except Exception as e:
+            logger.warn("Ignoring incorrect local configuration: %s" % e)
+            current_conf = {}
         try:
             new = self.zkconn.get(self.node_path,
                                   watch=(self.monitored and None or self.watch_node))
