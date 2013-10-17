@@ -185,6 +185,61 @@ class TestZkImporter(KazooTestCase):
                          {"enabled": "22",
                           "hostname": self.NAME})
 
+
+    def test_invalid_initial_data(self):
+        """Test that nothing happens when invalid data is stored in file"""
+        self.client.ensure_path("/services/db/%s" % self.IP)
+        self.client.set("/services/db/%s" % self.IP,
+                        json.dumps({"enabled": "15",
+                                    "hostname": self.NAME}))
+        self.conf.read.side_effect = ValueError("invalid json")
+        z = self.Z(self.client, "/services/db", self.conf)
+        z.loop(4, timeout=self.TIMEOUT)
+        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
+                         {"enabled": "15",
+                          "hostname": self.NAME})
+        self.conf.reset_mock()
+        self.conf.read.side_effect = None
+        self.conf.read.return_value = {"enabled": "1",
+                                       "hostname": self.NAME}
+        z.dispatch(FakeFileEvent())
+        z.loop(4, timeout=self.TIMEOUT)
+        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
+                         {"enabled": "1",
+                          "hostname": self.NAME})
+
+    def test_invalid_data(self):
+        """Test that nothing happens when in-file data become invalid"""
+        self.conf.read.return_value = {"enabled": "1",
+                                       "hostname": self.NAME}
+        z = self.Z(self.client, "/services/db", self.conf)
+        z.loop(4, timeout=self.TIMEOUT)
+        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
+                         {"enabled": "1",
+                          "hostname": self.NAME})
+        self.conf.read.side_effect = ValueError("invalid json")
+        z.dispatch(FakeFileEvent())
+        z.loop(10, timeout=self.TIMEOUT)
+        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
+                         {"enabled": "1",
+                          "hostname": self.NAME})
+
+    def test_invalid_data_while_remote_modification(self):
+        """Test that nothing happens when in-file data become invalid and we get a remote modification"""
+        self.conf.read.return_value = {"enabled": "1",
+                                       "hostname": self.NAME}
+        z = self.Z(self.client, "/services/db", self.conf)
+        z.loop(4, timeout=self.TIMEOUT)
+        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
+                         {"enabled": "1",
+                          "hostname": self.NAME})
+        self.conf.read.side_effect = ValueError("invalid json")
+        z.dispatch(FakeFileEvent())
+        z.loop(10, timeout=self.TIMEOUT)
+        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
+                         {"enabled": "1",
+                          "hostname": self.NAME})
+
 class TestZkJoiner(TestZkImporter):
 
     Z = ZkFarmJoiner
@@ -355,3 +410,18 @@ class TestZkJoiner(TestZkImporter):
         z.loop(10, timeout=self.TIMEOUT)
         self.assertEqual(json.loads(self.client.get("/services/db/common")[0]),
                          {"enabled": "1"})
+
+    def test_invalid_data_while_remote_modification(self):
+        """Test that nothing happens when in-file data become invalid and we get a remote modification"""
+        self.conf.read.return_value = {"enabled": "1",
+                                       "hostname": self.NAME}
+        z = self.Z(self.client, "/services/db", self.conf)
+        z.loop(4, timeout=self.TIMEOUT)
+        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
+                         {"enabled": "1",
+                          "hostname": self.NAME})
+        self.conf.read.side_effect = ValueError("invalid json")
+        self.client.set("/services/db/%s" % self.IP, json.dumps({ "enabled": "42" }))
+        z.loop(10, timeout=self.TIMEOUT)
+        self.assertEqual(json.loads(self.client.get("/services/db/%s" % self.IP)[0]),
+                         {"enabled": "42"})
