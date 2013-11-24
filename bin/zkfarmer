@@ -14,7 +14,7 @@ from zkfarmer.conf import Conf
 from zkfarmer.utils import create_filter, dict_filter, ColorizingStreamHandler
 from zkfarmer import ZkFarmer, VERSION
 
-from kazoo.client import KazooClient
+from kazoo.client import KazooClient, KazooRetry
 
 import logging
 
@@ -30,6 +30,9 @@ def main():
     parser.add_argument('-V', '--version', action='version', version='%%(prog)s %s' % VERSION)
     parser.add_argument('-H', '--host', dest='host', default=os.environ.get('ZKHOST', 'localhost:2181'),
                         help='list of zookeeper hosts:port sperated by commas')
+    parser.add_argument('-r', '--retries',
+                        default=5, type=int, metavar="N",
+                        help='retry N times in case of failure')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-q', '--quiet', dest='quiet', action='store_true',
                        help='lower the log level so only warnings and errors are logged')
@@ -177,7 +180,9 @@ def main():
         parser.error(e)
         exit(1)
 
-    zkconn = KazooClient(args.host, max_retries=5)
+    zkconn = KazooClient(args.host,
+                         connection_retry=KazooRetry(max_tries=args.retries),
+                         command_retry=KazooRetry(max_tries=args.retries))
     zkconn.start()
 
     def sighandler(sig, frame):
