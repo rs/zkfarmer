@@ -289,6 +289,12 @@ class ZkFarmImporter(ZkFarmWatcher):
 
 class ZkFarmJoiner(ZkFarmImporter):
 
+    def __init__(self, zkconn, root_node_path, conf, common=False,
+                 updated_handler=None):
+        self.updated_handler = updated_handler
+        super(ZkFarmJoiner, self).__init__(zkconn, root_node_path,
+                                           conf, common)
+
     def watch_node(self, what):
         self.event("znode modified")
 
@@ -299,6 +305,8 @@ class ZkFarmJoiner(ZkFarmImporter):
         if not self.common:
             info['hostname'] = gethostname()
         self.conf.write(info)
+        if self.updated_handler:
+            self.updated_handler()
 
         super(ZkFarmJoiner, self).exec_initial_setup()
 
@@ -331,5 +339,7 @@ class ZkFarmJoiner(ZkFarmImporter):
                 logger.debug('Previous conf: %r' % current_conf)
                 logger.debug('New conf:      %r' % new_conf)
                 self.conf.write(new_conf)
+                if self.updated_handler:
+                    self.updated_handler()
         except NoNodeError:
             logger.warn("not able to watch for node %s: not exist anymore" % self.node_path)
