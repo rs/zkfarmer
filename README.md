@@ -62,7 +62,7 @@ Usage for the `zkfarmer join` command:
       -h, --help            show this help message and exit
       -f {json,yaml,php,dir}, --format {json,yaml,php,dir}
                             set the configuration format
-      -c, --common          use a common zookeeper node instead of a dedicate node
+      -c, --common          use a common zookeeper node instead of a dedicated node
 
 Syncing Farm Configuration
 --------------------------

@@ -50,7 +50,7 @@ def main():
     subparser.add_argument('-f', '--format', dest='format', choices=['json', 'yaml', 'php', 'dir'],
                            help='set the configuration format')
     subparser.add_argument('-c', '--common', dest='common', action='store_true',
-                           help='use a common zookeeper node instead of a dedicate node')
+                           help='use a common zookeeper node instead of a dedicated node')
 
     # The `import' sub-command
     subparser = subparsers.add_parser('import', help='import the current host configuration to a farm',
@@ -60,7 +60,7 @@ def main():
     subparser.add_argument('-f', '--format', dest='format', choices=['json', 'yaml', 'php', 'dir'],
                            help='set the configuration format')
     subparser.add_argument('-c', '--common', dest='common', action='store_true',
-                           help='use a common zookeeper node instead of a dedicate node')
+                           help='use a common zookeeper node instead of a dedicated node')
 
     # The `export' sub-command
     subparser = subparsers.add_parser('export', help='exports and maintain farm\'s nodes configuration',
