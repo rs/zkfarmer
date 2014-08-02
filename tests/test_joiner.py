@@ -273,6 +273,21 @@ class TestZkJoiner(TestZkImporter):
         self.conf.write.assert_called_once_with({"enabled": "0",
                                                  "hostname": self.NAME})
 
+    def test_updated_handler_called(self):
+        """Test the appropriate handler is called on modification"""
+        self.conf.read.return_value = {"enabled": "1",
+                                       "hostname": self.NAME}
+        handler = Mock()
+        z = ZkFarmJoiner(self.client, "/services/db", self.conf,
+                         updated_handler=handler)
+        z.loop(3, timeout=self.TIMEOUT)
+        handler.reset_mock()
+        self.client.set("/services/db/%s" % self.IP,
+                        json.dumps({"enabled": "0",
+                                    "hostname": self.NAME}))
+        z.loop(2, timeout=self.TIMEOUT)
+        handler.assert_called_once_with()
+
     def test_no_write_when_no_modification(self):
         """Check we don't write modification if not needed"""
         self.conf.read.return_value = {"enabled": "1",
@@ -287,6 +302,23 @@ class TestZkJoiner(TestZkImporter):
                                     "hostname": self.NAME}))
         z.loop(2, timeout=self.TIMEOUT)
         self.assertFalse(self.conf.write.called)
+
+    def test_no_update_handler_when_no_modification(self):
+        """Check we don't call handler if not needed"""
+        self.conf.read.return_value = {"enabled": "1",
+                                       "hostname": self.NAME}
+        handler = Mock()
+        z = ZkFarmJoiner(self.client, "/services/db", self.conf,
+                         updated_handler=handler)
+        z.loop(3, timeout=self.TIMEOUT)
+        handler.reset_mock()
+        self.conf.read.return_value = {"enabled": "0",
+                                       "hostname": self.NAME}
+        self.client.set("/services/db/%s" % self.IP,
+                        json.dumps({"enabled": "0",
+                                    "hostname": self.NAME}))
+        z.loop(2, timeout=self.TIMEOUT)
+        self.assertFalse(handler.called)
 
     def test_disconnect_and_remote_modification(self):
         """Test we handle disconnect and remote modification after reconnect"""
