@@ -328,7 +328,7 @@ Usage for the `zkfarmer exec` command:
     This sub-command executes a local command in respect to various farm
     conditions and block until all conditions aren't met (will block forever if
     `--repeat' option is used). A lock can be acquired before to execute the
-    command and can require that no more than N other clients aquired the lock
+    command and can require that no more than N other clients acquired the lock
     before the local command is executed. A node property can be changed as soon
     as the command is executed, and restored to its previous value as soon command
     exit. The command can be prevented from being launched until the farm isn't
