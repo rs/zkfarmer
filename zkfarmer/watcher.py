@@ -19,7 +19,7 @@ from watchdog.observers import Observer
 
 from .utils import serialize, unserialize, ip
 from kazoo.exceptions import NoNodeError, NodeExistsError, ZookeeperError
-from kazoo.client import KazooState, OPEN_ACL_UNSAFE
+from kazoo.client import KazooState, KeeperState, OPEN_ACL_UNSAFE
 
 class ZkFarmWatcher(object):
 
@@ -95,7 +95,7 @@ class ZkFarmWatcher(object):
                     if execute(*args) is False:
                         do = False
                     errors = 0
-                except ZookeeperError, e:
+                except ZookeeperError as e:
                     logger.exception("Got a zookeeper exception, reschedule the transition")
                     self.events.put((priority, event, args))
                     do = False
@@ -343,3 +343,11 @@ class ZkFarmJoiner(ZkFarmImporter):
                     self.updated_handler()
         except NoNodeError:
             logger.warn("not able to watch for node %s: not exist anymore" % self.node_path)
+
+    def exec_connection_lost(self):
+        """The connection might be closed here"""
+        logger.debug("We have the client (session) state of " + self.zkconn.client_state)
+        if self.zkconn.client_state == KeeperState.CLOSED:
+            logger.error("Zookeeper connection has been dropped since the session is closed and maximum number of retries reached")
+            self.zkconn.stop()
+            exit(1)
