@@ -178,7 +178,7 @@ def main():
     except AttributeError:
         # the subcommand have no conf
         pass
-    except ValueError, e:
+    except ValueError as e:
         parser.error(e)
         exit(1)
 
