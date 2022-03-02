@@ -25,7 +25,7 @@ def serialize(data):
         if type(data) != dict:
             raise TypeError('Must be a dict')
         return json.dumps(data)
-    except Exception, e:
+    except Exception as e:
         logger.warn('Cannot serialize: %s [%s]', data, e)
         return '{}'
 
@@ -38,7 +38,7 @@ def unserialize(serialized):
         if type(data) != dict:
             raise TypeError('Not a dict')
         return data
-    except Exception, e:
+    except Exception as e:
         logger.warn('Cannot unserialize: %s [%s]', serialized, e)
         return {}
 
