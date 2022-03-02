@@ -228,9 +228,9 @@ def main():
                         if val is None:
                           val = "None" 
                         fields_data.append('='.join([key, val]))
-                    print '%-20s %s' % (name[0:20], ', '.join(fields_data))
+                    print('%-20s %s' % (name[0:20], ', '.join(fields_data)))
                     continue
-            print name
+            print(name)
 
     elif args.command == 'get':
         if args.field == '*':
@@ -238,7 +238,7 @@ def main():
             info = farmer.get(args.zknode)
             conf.write(info)
         else:
-            print farmer.get(args.zknode, args.field)
+            print(farmer.get(args.zknode, args.field))
 
     elif args.command == 'set':
         farmer.set(args.zknode, args.field, args.value)
@@ -257,7 +257,7 @@ def main():
         elif status == farmer.STATUS_UNKNOWN:
             label = 'UNKNOWN'
 
-        print '%s: %s' % (label, reason)
+        print('%s: %s' % (label, reason))
         zkconn.stop()
         exit(status)
 
