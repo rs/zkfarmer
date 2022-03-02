@@ -8,7 +8,7 @@ from kazoo.client import KazooClient
 
 class Farm(ConfBase):
     def write(self, nodes):
-        print nodes
+        print(nodes)
 
 zkconn = KazooClient('localhost:2181')
 farmer = ZkFarmer(zkconn)

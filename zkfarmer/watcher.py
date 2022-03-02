@@ -6,7 +6,7 @@
 # file that was distributed with this source code.
 
 import threading
-import Queue
+import queue
 import time
 import itertools
 import os
@@ -32,7 +32,7 @@ class ZkFarmWatcher(object):
     EVENTS = {}
 
     def __init__(self, zkconn):
-        self.events = Queue.PriorityQueue()
+        self.events = queue.PriorityQueue()
         self.counter = itertools.count()
         self.zkconn = zkconn
         self.zkconn.add_listener(self._zkchange)
@@ -66,7 +66,7 @@ class ZkFarmWatcher(object):
             # Process pending events
             try:
                 priority, event, args = self.events.get(True, timeout=timeout)
-            except Queue.Empty:
+            except queue.Empty:
                 continue
 
             transition = [t for t in self.EVENTS[event] if t[0] == self.state]

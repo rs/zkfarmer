@@ -167,7 +167,7 @@ def main():
     logger.setLevel(level)
 
     try:
-        if args.zknode[0] is not "/":
+        if args.zknode[0] != "/":
             parser.error('First argument must be the full path to the zookeeper node to create (eg: /services/db)')
     except AttributeError:
         # the subcommand have no znode
