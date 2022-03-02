@@ -127,8 +127,10 @@ def create_filter(filters):
 
 class ColorizingStreamHandler(logging.StreamHandler):
     """Provide a nicer logging output to error output with colors"""
-    colors    = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white']
-    color_map = dict([(x, colors.index(x)) for x in colors])
+    def __init__(self):
+        self.colors    = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white']
+        self.color_map = dict([(x, colors.index(x)) for x in colors])
+        
     level_map = {
         logging.DEBUG:    (None,  'blue',   " DBG"),
         logging.INFO:     (None,  'green',  "INFO"),
