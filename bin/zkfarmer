@@ -40,7 +40,6 @@ def main():
                        help='raise the log level')
 
     subparsers = parser.add_subparsers(title='subcommands', dest='command')
-    subparsers.add_parser('join')
 
     # The `join' sub-command
     subparser = subparsers.add_parser('join', help='make the current host to join a farm',
