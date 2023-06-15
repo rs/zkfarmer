@@ -115,23 +115,23 @@ class TestConfJSON(TempDirectoryTestCase):
 
     def test_json_appropriate_rights(self):
         """Check if a file is created with the appropriate rights"""
-        os.umask(022)
+        os.umask(0o22)
         name = "%s/test.json" % self.tmpdir
         a = conf.Conf(name)
         a.write({"1": "2"})
         del a
         a = os.stat(name)
-        self.assertEqual(a.st_mode & 0777, 0644)
+        self.assertEqual(a.st_mode & 0o777, 0o644)
 
     def test_json_appropriate_rights_umask(self):
         """Check if a file is created with appropriate rights using non standard umask."""
-        os.umask(027)
+        os.umask(0o27)
         name = "%s/test.json" % self.tmpdir
         a = conf.Conf(name)
         a.write({"1": "2"})
         del a
         a = os.stat(name)
-        self.assertEqual(a.st_mode & 0777, 0640)
+        self.assertEqual(a.st_mode & 0o777, 0o640)
 
 class TestConfYAML(TempDirectoryTestCase):
 

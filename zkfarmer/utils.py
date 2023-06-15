@@ -4,6 +4,7 @@ import logging
 import re
 import time
 from socket import socket, AF_INET, SOCK_DGRAM
+from functools import reduce
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ def serialize(data):
         if type(data) != dict:
             raise TypeError('Must be a dict')
         return json.dumps(data)
-    except Exception, e:
+    except Exception as e:
         logger.warn('Cannot serialize: %s [%s]', data, e)
         return '{}'
 
@@ -38,7 +39,7 @@ def unserialize(serialized):
         if type(data) != dict:
             raise TypeError('Not a dict')
         return data
-    except Exception, e:
+    except Exception as e:
         logger.warn('Cannot unserialize: %s [%s]', serialized, e)
         return {}
 
@@ -67,7 +68,7 @@ def dict_filter(the_dict, field_or_fields=None):
         for f in field_or_fields:
             fields[f] = dict_get_path(the_dict, f)
         return fields
-    elif isinstance(field_or_fields, (str, unicode)):
+    elif isinstance(field_or_fields, str):
         return dict_get_path(the_dict, field_or_fields)
     else:
         raise TypeError('Invalid type for field path: %s' % type(field_or_fields))
@@ -127,17 +128,18 @@ def create_filter(filters):
 
 class ColorizingStreamHandler(logging.StreamHandler):
     """Provide a nicer logging output to error output with colors"""
-    colors    = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white']
-    color_map = dict([(x, colors.index(x)) for x in colors])
-    level_map = {
-        logging.DEBUG:    (None,  'blue',   " DBG"),
-        logging.INFO:     (None,  'green',  "INFO"),
-        logging.WARNING:  (None,  'yellow', "WARN"),
-        logging.ERROR:    (None,  'red',    " ERR"),
-        logging.CRITICAL: ('red', 'white',  "CRIT")
-        }
-    csi = '\x1b['
-    reset = '\x1b[0m'
+    def __init__(self):
+        self.colors    = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white']
+        self.color_map = dict([(x, self.colors.index(x)) for x in self.colors])
+        self.level_map = {
+            logging.DEBUG:    (None,  'blue',   " DBG"),
+            logging.INFO:     (None,  'green',  "INFO"),
+            logging.WARNING:  (None,  'yellow', "WARN"),
+            logging.ERROR:    (None,  'red',    " ERR"),
+            logging.CRITICAL: ('red', 'white',  "CRIT")
+            }
+        self.csi = '\x1b['
+        self.reset = '\x1b[0m'
 
     @property
     def is_tty(self):
